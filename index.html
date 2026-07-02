@@ -603,6 +603,76 @@
   }
   .ed-section-bar.active{ background:rgba(255,159,67,.15); border-color:rgba(255,159,67,.4); }
 
+  /* ===== MODALE TOKEN GITHUB ===== */
+  .token-modal-bg{
+    position:fixed; inset:0; z-index:80;
+    background:rgba(6,5,14,.92); backdrop-filter:blur(14px);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .token-modal{
+    background:linear-gradient(145deg,#1a1530,#110d20);
+    border:1px solid rgba(150,130,210,.35); border-radius:20px;
+    padding:30px 32px; width:100%; max-width:480px;
+    box-shadow:0 32px 80px rgba(0,0,0,.7);
+  }
+  .token-modal h3{
+    font-family:"Space Grotesk",sans-serif; font-size:19px; font-weight:700;
+    background:linear-gradient(92deg,var(--cyan),var(--violet));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    margin-bottom:8px;
+  }
+  .token-modal p{ font-size:13px; color:var(--muted); line-height:1.6; margin-bottom:16px; }
+  .token-modal p b{ color:var(--text); }
+  .token-row{ display:flex; gap:8px; margin-bottom:12px; }
+  .token-row input{
+    flex:1; font-family:"Inter",sans-serif; font-size:13px; color:var(--text);
+    background:rgba(255,255,255,.06); border:1px solid rgba(150,130,210,.35);
+    border-radius:10px; padding:10px 14px; outline:none; transition:border-color .15s;
+  }
+  .token-row input:focus{ border-color:var(--cyan); }
+  .token-row input::placeholder{ color:var(--muted); }
+  .token-row .btn-show{
+    font-size:16px; background:rgba(255,255,255,.07); border:1px solid var(--panel-line);
+    border-radius:10px; padding:10px 12px; cursor:pointer; color:var(--muted);
+    transition:color .15s;
+  }
+  .token-row .btn-show:hover{ color:var(--text); }
+  .token-btns{ display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
+  .token-btns .btn-skip{
+    font-family:"Inter",sans-serif; font-size:13px; color:var(--muted);
+    background:none; border:1px solid var(--panel-line); border-radius:10px;
+    padding:9px 16px; cursor:pointer;
+  }
+  .token-btns .btn-save{
+    font-family:"Inter",sans-serif; font-size:13px; font-weight:600; color:#0a0912;
+    background:linear-gradient(90deg,var(--cyan),var(--violet));
+    border:none; border-radius:10px; padding:9px 20px; cursor:pointer;
+  }
+  .token-status{ font-size:12px; margin-top:10px; min-height:18px; }
+  .token-status.ok{ color:var(--correct); }
+  .token-status.err{ color:var(--wrong); }
+
+  /* indicateur sync dans le header */
+  .sync-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--muted);
+    background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:11px; padding:7px 11px; cursor:pointer;
+    transition:border-color .2s;
+  }
+  .sync-pill:hover{ border-color:rgba(150,130,210,.5); }
+  .sync-pill.synced{ border-color:rgba(52,211,153,.4); color:#a7f3d0; }
+  .sync-pill.syncing{ border-color:rgba(95,227,242,.3); }
+  .sync-pill .sync-dot{
+    width:8px; height:8px; border-radius:50%; background:#3d3555; flex-shrink:0;
+  }
+  .sync-pill.synced .sync-dot{ background:var(--correct); box-shadow:0 0 6px var(--correct); }
+  .sync-pill.syncing .sync-dot{
+    background:var(--cyan);
+    animation:spin .7s linear infinite;
+    border-radius:0; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
+  }
+
   @media(max-width:680px){
     .brand .tag{ display:none; }
     header{ padding:8px 12px; }
@@ -668,6 +738,10 @@
         Vitesse
         <input type="range" id="speed" min="0.3" max="1.4" step="0.05" value="1" />
         <span class="val" id="speedVal">1.0×</span>
+      </div>
+      <div class="sync-pill" id="syncPill" title="Synchronisation GitHub — cliquer pour configurer">
+        <span class="sync-dot"></span>
+        <span id="syncTxt">☁ Sync</span>
       </div>
       <div class="midi-pill" id="midiPill">
         <span class="dot"></span>
@@ -2102,12 +2176,11 @@ document.getElementById('midiFile').addEventListener('change',e=>{
         const sel=document.getElementById('songSelect');
         const key='midi_'+Date.now();
         SONGS[key]={name, notes:parsed.notes, pedal:parsed.pedal, hasHands:parsed.hasHands};
-        const opt=document.createElement('option');
-        opt.value=key; opt.textContent=name; opt.selected=true;
-        sel.appendChild(opt);
-        loadNotes(ns, name);
+        GistSync.addSongToSelect(key, name);
+        GistSync.saveSong(key, name, parsed);
+        loadNotes(SONGS[key], name);
         pauseFn();
-        setMidiStatus('Chargé : '+ns.length+' notes', null);
+        setMidiStatus('Chargé : '+parsed.notes.length+' notes', null);
       });
     }catch(err){alert('Erreur lecture MIDI : '+err.message);}
   };
@@ -2384,10 +2457,8 @@ document.getElementById('startBtn').addEventListener('click',()=>{
     showNameDialog('Partition', name => {
       const key = 'sheet_' + Date.now();
       SONGS[key] = { name, notes: parsedSheetNotes, pedal: [], hasHands: false };
-      const sel = document.getElementById('songSelect');
-      const opt = document.createElement('option');
-      opt.value = key; opt.textContent = name; opt.selected = true;
-      sel.appendChild(opt);
+      GistSync.addSongToSelect(key, name);
+      GistSync.saveSong(key, name, SONGS[key]);
       loadNotes(SONGS[key], name);
       pauseFn();
       closeModal();
@@ -3047,8 +3118,238 @@ Règles :
 })();
 
 /* ============================================================
+   Synchronisation GitHub Gist
+   ============================================================ */
+const GistSync = (()=>{
+  const LS_TOKEN = 'pianoflow_gh_token';
+  const LS_GIST  = 'pianoflow_gist_id';
+  const LS_LOCAL = 'pianoflow_local_songs';
+  const FILENAME = 'pianoflow_songs.json';
+
+  let token = null, gistId = null;
+
+  const syncPill  = document.getElementById('syncPill');
+  const syncTxt   = document.getElementById('syncTxt');
+
+  function setSyncStatus(state, txt){
+    syncPill.className = 'sync-pill' + (state ? ' '+state : '');
+    syncTxt.textContent = txt;
+  }
+
+  function init(){
+    token  = localStorage.getItem(LS_TOKEN);
+    gistId = localStorage.getItem(LS_GIST);
+    if(token) setSyncStatus('synced', '☁ Sync actif');
+    else      setSyncStatus('', '☁ Sync désactivé');
+  }
+
+  // ---- API GitHub Gist ----
+  async function apiCall(method, path, body){
+    const res = await fetch('https://api.github.com' + path, {
+      method,
+      headers:{
+        'Authorization': 'token ' + token,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(err.message || 'Erreur GitHub ' + res.status);
+    }
+    return res.json();
+  }
+
+  // Vérifie que le token est valide
+  async function verifyToken(tok){
+    const res = await fetch('https://api.github.com/user', {
+      headers:{ 'Authorization': 'token ' + tok, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if(!res.ok) throw new Error('Token invalide');
+    return res.json();
+  }
+
+  // Trouve ou crée le gist pianoflow
+  async function getOrCreateGist(){
+    if(gistId){
+      try {
+        await apiCall('GET', '/gists/' + gistId);
+        return gistId;
+      } catch(e){ gistId = null; }
+    }
+    // Cherche parmi les gists existants
+    const gists = await apiCall('GET', '/gists');
+    const found = gists.find(g => g.files && g.files[FILENAME]);
+    if(found){ gistId = found.id; localStorage.setItem(LS_GIST, gistId); return gistId; }
+    // Crée un nouveau gist
+    const created = await apiCall('POST', '/gists', {
+      description: 'Piano Flow — morceaux sauvegardés',
+      public: false,
+      files:{ [FILENAME]: { content: JSON.stringify({songs:{}}) } }
+    });
+    gistId = created.id;
+    localStorage.setItem(LS_GIST, gistId);
+    return gistId;
+  }
+
+  // Charge les morceaux depuis le gist
+  async function loadFromGist(){
+    if(!token) return {};
+    setSyncStatus('syncing', '☁ Chargement…');
+    try {
+      const id = await getOrCreateGist();
+      const gist = await apiCall('GET', '/gists/' + id);
+      const raw = gist.files[FILENAME]?.content || '{"songs":{}}';
+      const data = JSON.parse(raw);
+      setSyncStatus('synced', '☁ Sync actif');
+      return data.songs || {};
+    } catch(e){
+      setSyncStatus('', '☁ Erreur sync');
+      console.warn('Erreur chargement gist:', e.message);
+      return {};
+    }
+  }
+
+  // Sauvegarde tous les morceaux dans le gist
+  async function saveToGist(songs){
+    if(!token) return;
+    setSyncStatus('syncing', '☁ Sauvegarde…');
+    try {
+      const id = await getOrCreateGist();
+      await apiCall('PATCH', '/gists/' + id, {
+        files:{ [FILENAME]: { content: JSON.stringify({songs}, null, 2) } }
+      });
+      setSyncStatus('synced', '☁ Sync actif');
+    } catch(e){
+      setSyncStatus('', '☁ Erreur sync');
+      console.warn('Erreur sauvegarde gist:', e.message);
+    }
+  }
+
+  // Ajoute un morceau (local + gist)
+  function getLocalSongs(){
+    try { return JSON.parse(localStorage.getItem(LS_LOCAL)||'{}'); } catch(e){ return {}; }
+  }
+  function setLocalSongs(songs){
+    try { localStorage.setItem(LS_LOCAL, JSON.stringify(songs)); } catch(e){}
+  }
+
+  async function saveSong(key, name, parsed){
+    const song = { name, notes: parsed.notes, pedal: parsed.pedal||[], hasHands: parsed.hasHands||false, savedAt: Date.now() };
+    // local
+    const local = getLocalSongs(); local[key] = song; setLocalSongs(local);
+    // gist (async, sans bloquer)
+    if(token){
+      const all = await loadFromGist().catch(()=>({}));
+      all[key] = song;
+      saveToGist(all);
+    }
+  }
+
+  async function deleteSong(key){
+    const local = getLocalSongs(); delete local[key]; setLocalSongs(local);
+    if(token){
+      const all = await loadFromGist().catch(()=>({}));
+      delete all[key];
+      saveToGist(all);
+    }
+  }
+
+  // Charge et affiche tous les morceaux sauvegardés dans la liste
+  async function restoreAll(){
+    // D'abord local (immédiat)
+    const local = getLocalSongs();
+    // Puis gist (async) — fusionne
+    let gistSongs = {};
+    if(token) gistSongs = await loadFromGist().catch(()=>({}));
+    const all = {...local, ...gistSongs};
+    // Fusionne vers local
+    setLocalSongs(all);
+    if(!Object.keys(all).length) return;
+    const sel = document.getElementById('songSelect');
+    const grp = document.createElement('optgroup');
+    grp.label = '💾 Mes morceaux';
+    grp.id = 'savedSongsGroup';
+    sel.appendChild(grp);
+    const sorted = Object.entries(all).sort((a,b)=>(a[1].savedAt||0)-(b[1].savedAt||0));
+    for(const [key, s] of sorted){
+      SONGS[key] = s;
+      addSongToSelect(key, s.name, grp);
+    }
+  }
+
+  function addSongToSelect(key, name, grp){
+    const sel = document.getElementById('songSelect');
+    let g = grp || document.getElementById('savedSongsGroup');
+    if(!g){
+      g = document.createElement('optgroup');
+      g.label = '💾 Mes morceaux';
+      g.id = 'savedSongsGroup';
+      sel.appendChild(g);
+    }
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = name; opt.selected = true;
+    g.appendChild(opt);
+    return opt;
+  }
+
+  // ---- Modale de configuration ----
+  const modalBg   = document.getElementById('tokenModalBg');
+  const tokenInp  = document.getElementById('tokenInput');
+  const tokenShow = document.getElementById('tokenShow');
+  const tokenSave = document.getElementById('tokenSave');
+  const tokenSkip = document.getElementById('tokenSkip');
+  const tokenStat = document.getElementById('tokenStatus');
+
+  syncPill.addEventListener('click', ()=>{
+    if(token) tokenInp.value = token;
+    tokenStat.textContent = '';
+    tokenStat.className = 'token-status';
+    modalBg.classList.remove('hidden');
+  });
+
+  tokenShow.addEventListener('click', ()=>{
+    tokenInp.type = tokenInp.type === 'password' ? 'text' : 'password';
+  });
+
+  tokenSkip.addEventListener('click', ()=>{
+    modalBg.classList.add('hidden');
+  });
+
+  tokenSave.addEventListener('click', async ()=>{
+    const tok = tokenInp.value.trim();
+    if(!tok){ tokenStat.textContent = 'Entre un token valide.'; tokenStat.className='token-status err'; return; }
+    tokenStat.textContent = 'Vérification…'; tokenStat.className='token-status';
+    try {
+      const user = await verifyToken(tok);
+      token = tok;
+      localStorage.setItem(LS_TOKEN, token);
+      gistId = null; localStorage.removeItem(LS_GIST);
+      tokenStat.textContent = '✓ Connecté en tant que ' + user.login;
+      tokenStat.className = 'token-status ok';
+      setSyncStatus('synced', '☁ Sync actif');
+      // Synchronise tout de suite
+      const local = getLocalSongs();
+      if(Object.keys(local).length) await saveToGist(local);
+      else await restoreAll();
+      setTimeout(()=> modalBg.classList.add('hidden'), 1200);
+    } catch(e){
+      tokenStat.textContent = '✗ ' + e.message;
+      tokenStat.className = 'token-status err';
+    }
+  });
+
+  tokenInp.addEventListener('keydown', e=>{ if(e.key==='Enter') tokenSave.click(); });
+
+  return { init, saveSong, deleteSong, restoreAll, addSongToSelect };
+})();
+
+/* ============================================================
    Démarrage
    ============================================================ */
+GistSync.init();
+GistSync.restoreAll();
 const startSong=SONGS.ode;
 loadNotes(startSong.notes,startSong.name);
 initMIDI();
@@ -3062,5 +3363,29 @@ requestAnimationFrame(step);
 // Samples chargés en arrière-plan — le bouton est déjà disponible
 
 </script>
+<!-- ===== MODALE TOKEN GITHUB ===== -->
+<div class="token-modal-bg hidden" id="tokenModalBg">
+  <div class="token-modal">
+    <h3>☁ Synchronisation multi-appareils</h3>
+    <p>
+      Tes morceaux MIDI seront sauvegardés dans un <b>GitHub Gist privé</b> et accessibles
+      depuis n'importe quel appareil. Il te faut un <b>token GitHub</b> avec la permission
+      <b>gist</b> uniquement.
+    </p>
+    <p>
+      Créer un token : github.com → Paramètres → Paramètres développeur →
+      Jetons d'accès personnels → Jetons classiques → cocher <b>gist</b>.
+    </p>
+    <div class="token-row">
+      <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+      <button class="btn-show" id="tokenShow" title="Afficher/masquer">👁</button>
+    </div>
+    <div class="token-status" id="tokenStatus"></div>
+    <div class="token-btns">
+      <button class="btn-skip" id="tokenSkip">Ignorer (local seulement)</button>
+      <button class="btn-save" id="tokenSave">💾 Enregistrer et synchroniser</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
