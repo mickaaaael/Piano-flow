@@ -544,8 +544,35 @@
     border:1px solid var(--panel-line);
     cursor:crosshair;
   }
-  .editor-canvas-wrap.mode-delete{ cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ctext y='16' font-size='16'%3E🗑%3C/text%3E%3C/svg%3E") 4 16, crosshair; }
-  .editor-canvas-wrap.mode-add{    cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ctext y='16' font-size='16'%3E✏%3C/text%3E%3C/svg%3E") 4 16, crosshair; }
+  .editor-canvas-wrap.mode-delete{ cursor:crosshair; }
+  .editor-canvas-wrap.mode-add{ cursor:none; }  /* curseur géré par canvas */
+
+  /* mini portée musicale (aperçu note à ajouter) */
+  .ed-staff-preview{
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    background:rgba(10,8,20,.88); border:1px solid rgba(95,227,242,.35);
+    border-radius:12px; padding:10px 18px 8px;
+    display:none; align-items:center; gap:16px; z-index:5;
+    pointer-events:none;
+  }
+  .ed-staff-preview.visible{ display:flex; }
+  .ed-staff-svg{ flex-shrink:0; }
+  .ed-note-label{
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+  }
+  .ed-note-name{
+    font-family:"Space Grotesk",sans-serif; font-size:22px; font-weight:700;
+    color:var(--cyan);
+  }
+  .ed-note-sub{ font-size:11px; color:var(--muted); }
+
+  /* indicateur de zoom */
+  .ed-zoom-indicator{
+    position:absolute; bottom:10px; right:14px;
+    font-size:11px; color:var(--muted);
+    background:rgba(10,8,20,.7); padding:4px 10px; border-radius:8px;
+    pointer-events:none; z-index:5;
+  }
   canvas#editorCanvas{ display:block; width:100%; height:100%; }
   /* clavier bas de l'éditeur */
   .editor-keyboard-strip{
@@ -808,6 +835,16 @@
   <div class="editor-canvas-wrap" id="edCanvasWrap">
     <canvas id="editorCanvas"></canvas>
     <div class="ed-note-info" id="edNoteInfo"></div>
+    <!-- aperçu note à ajouter -->
+    <div class="ed-staff-preview" id="edStaffPreview">
+      <svg class="ed-staff-svg" id="edStaffSvg" width="80" height="60" viewBox="0 0 80 60"></svg>
+      <div class="ed-note-label">
+        <div class="ed-note-name" id="edNoteName">—</div>
+        <div class="ed-note-sub" id="edNoteSub">choisir sur le clavier</div>
+      </div>
+    </div>
+    <!-- indicateur zoom -->
+    <div class="ed-zoom-indicator" id="edZoomIndicator">zoom : 1×</div>
   </div>
 
   <!-- Clavier pour ajouter des notes (mode add) -->
@@ -2592,6 +2629,7 @@ Règles :
     edSelA = null; edSelB = null; edAddMidi = null;
     edCutBtn.classList.add('hidden');
     edKeyboard && edKeyboard.classList.toggle('hidden', m !== 'add');
+    updateStaffPreview();
     const hints = {
       cut:    '<b>Mode Couper :</b> Clique-glisse sur la partition pour sélectionner une section, puis clique sur ✂ Couper.',
       delete: '<b>Mode Supprimer :</b> Clique sur une barre colorée pour supprimer cette note.',
@@ -2640,9 +2678,9 @@ Règles :
         edAddMidi = m;
         edKeyboard.querySelectorAll('.ed-key').forEach(k=>k.classList.remove('selected'));
         el.classList.add('selected');
-        edHint.innerHTML = "<b>Mode Ajouter :</b> Note choisie : <b style='color:var(--cyan)'>"
-          + NOTE_NAMES_FR[m%12] + Math.floor(m/12-1)
-          + '</b> — clique maintenant sur la partition pour placer la note.';
+        // Joue la note pour prévisualisation sonore
+        Audio.resume(); Audio.play(m, Audio.now(), 0.5, 0.7);
+        updateStaffPreview();
       });
       edKeyboard.appendChild(el);
     }
@@ -2700,20 +2738,23 @@ Règles :
     }
   }
 
+  // Position souris courante pour le curseur
+  let edMouseX = -1, edMouseY = -1;
+
   function onEdMove(e){
-    if(!edDragging && edMode !== 'delete') return;
     const {x, y, w, h} = edCanvasCoords(e);
+    edMouseX = x; edMouseY = y;
+
     if(edMode === 'cut' && edDragging){
       edSelB = xToTime(x, w);
       const tA = Math.min(edSelA, edSelB), tB = Math.max(edSelA, edSelB);
       const dur = (tB - tA).toFixed(1);
       edCutInfo.textContent = 'Sélection : ' + dur + 's';
-      if(tB - tA > 0.1){ edCutBtn.classList.remove('hidden'); }
-      else { edCutBtn.classList.add('hidden'); }
+      edCutBtn.classList.toggle('hidden', tB - tA <= 0.1);
     }
+
     // survol note en mode delete
     if(edMode === 'delete'){
-      const t = xToTime(x, w);
       let best = null, bestDist = Infinity;
       for(const n of notes){
         const nx = timeToX(n.start + n.dur/2, w);
@@ -2725,16 +2766,110 @@ Règles :
         edNoteInfo.textContent = NOTE_NAMES_FR[best.midi%12] + Math.floor(best.midi/12-1) + ' — clic pour supprimer';
       } else { edNoteInfo.textContent = ''; }
     }
+
+    // mode add : met à jour la note sous le curseur
+    if(edMode === 'add'){
+      const hoverMidi = Math.round(yToMidi(y, h));
+      const clamped = Math.max(minMidi, Math.min(maxMidi, hoverMidi));
+      edNoteInfo.textContent = NOTE_NAMES_FR[clamped%12] + Math.floor(clamped/12-1) +
+        (edAddMidi ? ' · clic pour placer' : ' · choisis dabord une note sur le clavier');
+    }
   }
 
-  function onEdUp(e){
-    edDragging = false;
-  }
+  function onEdUp(e){ edDragging = false; }
 
-  // Scroll molette pour naviguer dans l'éditeur
+  // Molette : Ctrl = zoom, sinon scroll horizontal
   function onEdWheel(e){
     e.preventDefault();
-    edScroll = Math.max(0, Math.min(songEnd * 0.9, edScroll + (e.deltaY/100) * 2));
+    if(e.ctrlKey || e.metaKey){
+      // Zoom centré sur la position de la souris
+      const {x, w} = edCanvasCoords(e);
+      const tAtMouse = xToTime(x, w || 1);
+      const oldZoom = edZoom;
+      edZoom = Math.max(1, Math.min(20, edZoom * (e.deltaY < 0 ? 1.25 : 0.8)));
+      // Ajuste le scroll pour que la position sous la souris reste fixe
+      const visibleDur = songEnd / edZoom;
+      edScroll = tAtMouse - (x / (w||1)) * visibleDur;
+      edScroll = Math.max(0, Math.min(songEnd - visibleDur, edScroll));
+      document.getElementById('edZoomIndicator').textContent = 'zoom : ' + edZoom.toFixed(1) + '×';
+    } else {
+      // Scroll horizontal
+      const visibleDur = songEnd / edZoom;
+      edScroll = Math.max(0, Math.min(songEnd - visibleDur, edScroll + (e.deltaY/100) * visibleDur * 0.15));
+    }
+  }
+
+  // Met à jour la mini-portée quand une note est sélectionnée
+  function updateStaffPreview(){
+    const preview = document.getElementById('edStaffPreview');
+    const svg     = document.getElementById('edStaffSvg');
+    const nameEl  = document.getElementById('edNoteName');
+    const subEl   = document.getElementById('edNoteSub');
+
+    if(edMode !== 'add'){ preview.classList.remove('visible'); return; }
+    preview.classList.add('visible');
+
+    if(edAddMidi === null){
+      nameEl.textContent = '—';
+      subEl.textContent  = 'Choisis une note sur le clavier';
+      svg.innerHTML = '';
+      return;
+    }
+
+    const noteFR = NOTE_NAMES_FR[edAddMidi % 12];
+    const oct    = Math.floor(edAddMidi / 12) - 1;
+    nameEl.textContent = noteFR + oct;
+    subEl.textContent  = 'clic sur la partition pour placer';
+
+    // Dessine une mini-portée avec la note
+    drawMiniStaff(svg, edAddMidi);
+  }
+
+  function drawMiniStaff(svg, midi){
+    // Portée simple 5 lignes, clé de sol, note positionnée
+    const W = 80, H = 60;
+    // Position verticale de la note sur la portée (basée sur Do4=60)
+    // Chaque demi-ton n'est pas une ligne — on utilise les degrés diatoniques
+    const DIATONIC = [0,0,1,1,2,3,3,4,4,5,5,6]; // demi-ton -> degré
+    const octDiff  = Math.floor(midi/12) - Math.floor(60/12);
+    const degree   = DIATONIC[midi%12] + octDiff * 7;
+    // Sur la portée, Do4 (degree=0) est en dessous de la portée (ligne supplémentaire)
+    // La ligne 1 du bas correspond au Mi4 (degree=2 de Do4)
+    // degree 0 = Do4 (sous portée), 1=Ré, 2=Mi (ligne 1), 3=Fa(espace 1)...
+    const lineSpacing = 8;
+    const staffTop    = 14;
+    // y de la note : Do4 (deg=0) -> staffTop + 4*lineSpacing + lineSpacing (sous portée)
+    const noteY = staffTop + 4*lineSpacing - (degree - 2) * lineSpacing/2 + lineSpacing;
+
+    // Couleur selon main
+    const isLeft = midi < (minMidi+maxMidi)/2;
+    const color  = isLeft ? '#f9ca24' : '#5fe3f2';
+
+    let svgContent = '';
+    // 5 lignes de portée
+    for(let i=0;i<5;i++){
+      const y = staffTop + i*lineSpacing;
+      svgContent += `<line x1="8" y1="${y}" x2="${W-8}" y2="${y}" stroke="rgba(200,190,230,.5)" stroke-width="1"/>`;
+    }
+    // Ligne supplémentaire si Do4 ou si note très haute/basse
+    if(midi <= 60){ // Do4 et en dessous : ligne de Do
+      const y = staffTop + 4*lineSpacing + lineSpacing;
+      svgContent += `<line x1="${W/2-8}" y1="${y}" x2="${W/2+8}" y2="${y}" stroke="${color}" stroke-width="1.5"/>`;
+    }
+    // Note (ellipse)
+    svgContent += `<ellipse cx="${W/2}" cy="${noteY}" rx="7" ry="5" fill="${color}" opacity="0.9"/>`;
+    // Hampe
+    if(degree < 6){
+      svgContent += `<line x1="${W/2+7}" y1="${noteY}" x2="${W/2+7}" y2="${noteY-22}" stroke="${color}" stroke-width="1.5"/>`;
+    } else {
+      svgContent += `<line x1="${W/2-7}" y1="${noteY}" x2="${W/2-7}" y2="${noteY+22}" stroke="${color}" stroke-width="1.5"/>`;
+    }
+    // Dièse si note altérée
+    const alterations = [0,1,0,1,0,0,1,0,1,0,1,0]; // 1=dièse
+    if(alterations[midi%12]){
+      svgContent += `<text x="${W/2-18}" y="${noteY+4}" font-size="14" fill="${color}" font-weight="bold">#</text>`;
+    }
+    svg.innerHTML = svgContent;
   }
 
   // ---- Couper ----
