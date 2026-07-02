@@ -932,6 +932,31 @@
 
 </div>
 
+<!-- ===== MODALE TOKEN GITHUB ===== -->
+<div class="token-modal-bg hidden" id="tokenModalBg">
+  <div class="token-modal">
+    <h3>☁ Synchronisation multi-appareils</h3>
+    <p>
+      Tes morceaux MIDI seront sauvegardés dans un <b>GitHub Gist privé</b> et accessibles
+      depuis n'importe quel appareil. Il te faut un <b>token GitHub</b> avec la permission
+      <b>gist</b> uniquement.
+    </p>
+    <p>
+      Créer un token : github.com → Paramètres → Paramètres développeur →
+      Jetons d'accès personnels → Jetons classiques → cocher <b>gist</b>.
+    </p>
+    <div class="token-row">
+      <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+      <button class="btn-show" id="tokenShow" title="Afficher/masquer">👁</button>
+    </div>
+    <div class="token-status" id="tokenStatus"></div>
+    <div class="token-btns">
+      <button class="btn-skip" id="tokenSkip">Ignorer (local seulement)</button>
+      <button class="btn-save" id="tokenSave">💾 Enregistrer et synchroniser</button>
+    </div>
+  </div>
+</div>
+
 <script>
 
 /* ============================================================
@@ -3363,29 +3388,5 @@ requestAnimationFrame(step);
 // Samples chargés en arrière-plan — le bouton est déjà disponible
 
 </script>
-<!-- ===== MODALE TOKEN GITHUB ===== -->
-<div class="token-modal-bg hidden" id="tokenModalBg">
-  <div class="token-modal">
-    <h3>☁ Synchronisation multi-appareils</h3>
-    <p>
-      Tes morceaux MIDI seront sauvegardés dans un <b>GitHub Gist privé</b> et accessibles
-      depuis n'importe quel appareil. Il te faut un <b>token GitHub</b> avec la permission
-      <b>gist</b> uniquement.
-    </p>
-    <p>
-      Créer un token : github.com → Paramètres → Paramètres développeur →
-      Jetons d'accès personnels → Jetons classiques → cocher <b>gist</b>.
-    </p>
-    <div class="token-row">
-      <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
-      <button class="btn-show" id="tokenShow" title="Afficher/masquer">👁</button>
-    </div>
-    <div class="token-status" id="tokenStatus"></div>
-    <div class="token-btns">
-      <button class="btn-skip" id="tokenSkip">Ignorer (local seulement)</button>
-      <button class="btn-save" id="tokenSave">💾 Enregistrer et synchroniser</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
