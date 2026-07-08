@@ -556,6 +556,26 @@
   .btn-ed-undo{  color:var(--text); background:rgba(255,255,255,.1); border:1px solid var(--panel-line); }
   .btn-ed-export{ color:#0a0912; background:linear-gradient(90deg,var(--cyan),var(--violet)); }
   .btn-ed-close{  color:var(--muted); background:rgba(255,255,255,.07); border:1px solid var(--panel-line); }
+
+  /* boutons zoom éditeur */
+  .ed-zoom-row{
+    display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,.06); border:1px solid var(--panel-line);
+    border-radius:11px; padding:4px 8px;
+  }
+  .ed-zoom-row .zl{
+    font-size:11px; color:var(--muted); min-width:42px; text-align:center;
+    font-variant-numeric:tabular-nums;
+  }
+  .btn-zoom{
+    font-size:18px; font-weight:700; color:var(--text);
+    background:rgba(255,255,255,.09); border:1px solid var(--panel-line);
+    border-radius:8px; width:36px; height:36px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .15s; line-height:1; padding:0;
+  }
+  .btn-zoom:hover{ background:rgba(255,255,255,.18); }
+  .btn-zoom:active{ transform:scale(.93); }
   /* canvas éditeur */
   .editor-canvas-wrap{
     flex:1; position:relative; border-radius:14px; overflow:hidden;
@@ -917,6 +937,13 @@
 
     <!-- Actions -->
     <div class="ed-actions">
+      <!-- boutons zoom -->
+      <div class="ed-zoom-row">
+        <button class="btn-zoom" id="edZoomOut" title="Dézoomer (voir plus)">−</button>
+        <span class="zl" id="edZoomLbl">1×</span>
+        <button class="btn-zoom" id="edZoomIn"  title="Zoomer (voir moins)">+</button>
+        <button class="btn-zoom" id="edZoomFit" title="Vue complète" style="font-size:13px;width:auto;padding:0 8px">⟷</button>
+      </div>
       <button class="btn-ed-action btn-ed-undo" id="edUndo">↩ Annuler</button>
       <button class="btn-ed-action btn-ed-export" id="edExport">⬇ Exporter MIDI</button>
       <button class="btn-ed-action btn-ed-close" id="edClose">✕ Fermer</button>
@@ -2922,6 +2949,51 @@ Règles :
       edScroll = Math.max(0, Math.min(songEnd - visibleDur, edScroll + (e.deltaY/100) * visibleDur * 0.15));
     }
   }
+
+  // ---- Boutons zoom ----
+  function applyZoom(newZoom, centerFrac){
+    centerFrac = centerFrac !== undefined ? centerFrac : 0.5;
+    const visibleDur = songEnd / edZoom;
+    const tAtCenter  = edScroll + centerFrac * visibleDur;
+    edZoom   = Math.max(1, Math.min(20, newZoom));
+    const newVis = songEnd / edZoom;
+    edScroll = Math.max(0, Math.min(songEnd - newVis, tAtCenter - centerFrac * newVis));
+    const lbl = document.getElementById('edZoomLbl');
+    if(lbl) lbl.textContent = edZoom.toFixed(1) + '×';
+    const ind = document.getElementById('edZoomIndicator');
+    if(ind) ind.textContent = 'zoom : ' + edZoom.toFixed(1) + '×';
+  }
+
+  document.getElementById('edZoomIn') .addEventListener('click', ()=> applyZoom(edZoom * 1.6));
+  document.getElementById('edZoomOut').addEventListener('click', ()=> applyZoom(edZoom / 1.6));
+  document.getElementById('edZoomFit').addEventListener('click', ()=>{ edZoom=1; edScroll=0; applyZoom(1); });
+
+  // ---- Pinch-to-zoom tactile ----
+  let pinchDist0 = null, pinchZoom0 = null, pinchCenterFrac = 0.5;
+  function pinchDist(e){ return Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY); }
+
+  document.getElementById('edCanvasWrap').addEventListener('touchstart', e=>{
+    if(e.touches.length === 2){
+      pinchDist0 = pinchDist(e);
+      pinchZoom0 = edZoom;
+      const r = edCanvas.getBoundingClientRect();
+      const midX = (e.touches[0].clientX + e.touches[1].clientX)/2 - r.left;
+      pinchCenterFrac = midX / r.width;
+      e.preventDefault();
+    }
+  }, {passive:false});
+
+  document.getElementById('edCanvasWrap').addEventListener('touchmove', e=>{
+    if(e.touches.length === 2 && pinchDist0){
+      const scale = pinchDist(e) / pinchDist0;
+      applyZoom(pinchZoom0 * scale, pinchCenterFrac);
+      e.preventDefault();
+    }
+  }, {passive:false});
+
+  document.getElementById('edCanvasWrap').addEventListener('touchend', e=>{
+    if(e.touches.length < 2){ pinchDist0 = null; pinchZoom0 = null; }
+  }, {passive:true});
 
   // Met à jour la mini-portée quand une note est sélectionnée
   function updateStaffPreview(){
