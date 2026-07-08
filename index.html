@@ -576,6 +576,17 @@
   }
   .btn-zoom:hover{ background:rgba(255,255,255,.18); }
   .btn-zoom:active{ transform:scale(.93); }
+
+  /* bouton lecture dans l'éditeur */
+  .btn-ed-play{
+    font-family:"Inter",sans-serif; font-size:13px; font-weight:600;
+    color:#0a0912; background:linear-gradient(90deg,var(--correct),#1aad7a);
+    border:none; border-radius:9px; padding:8px 16px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:7px; transition:opacity .15s;
+    min-width:100px; justify-content:center;
+  }
+  .btn-ed-play:hover{ opacity:.85; }
+  .btn-ed-play.paused{ background:linear-gradient(90deg,#f59e0b,#d97706); }
   /* canvas éditeur */
   .editor-canvas-wrap{
     flex:1; position:relative; border-radius:14px; overflow:hidden;
@@ -937,6 +948,8 @@
 
     <!-- Actions -->
     <div class="ed-actions">
+      <!-- bouton lecture -->
+      <button class="btn-ed-play" id="edPlayBtn">▶ Lecture</button>
       <!-- boutons zoom -->
       <div class="ed-zoom-row">
         <button class="btn-zoom" id="edZoomOut" title="Dézoomer (voir plus)">−</button>
@@ -2750,6 +2763,82 @@ Règles :
   document.getElementById('editBtn').addEventListener('click', openEditor);
   edClose.addEventListener('click', closeEditor);
 
+  // ---- Bouton lecture dans l'éditeur ----
+  const edPlayBtn = document.getElementById('edPlayBtn');
+  let edPlaying = false;
+  let edPlayT   = 0;    // position de lecture dans l'éditeur (secondes)
+  let edLastTs  = null;
+  let edRafPlay = null;
+
+  function edPlayLoop(ts){
+    if(!edPlaying){ edLastTs=null; return; }
+    if(!edLastTs) edLastTs = ts;
+    const dt = Math.min((ts - edLastTs)/1000, 0.1) * speed;
+    edLastTs = ts;
+    edPlayT += dt;
+
+    // Déclenche les notes au bon moment
+    for(const n of notes){
+      if(!n._edPlayed && n.start > edPlayT - dt && n.start <= edPlayT){
+        n._edPlayed = true;
+        Audio.play(n.midi, Audio.now(), n.dur, 0.8);
+        // Flash sur le canvas : stocker la note active
+        n._edFlash = performance.now();
+      }
+    }
+
+    // Scroll automatique pour suivre la lecture
+    if(edCanvas){
+      const r = edCanvas.getBoundingClientRect();
+      const W = r.width || 1;
+      const visibleDur = songEnd / edZoom;
+      // Si la tête de lecture sort de la vue, on fait défiler
+      const xNow = timeToX(edPlayT, W);
+      if(xNow > W * 0.85){
+        edScroll = Math.max(0, edPlayT - visibleDur * 0.15);
+      }
+    }
+
+    // Fin du morceau
+    if(edPlayT >= songEnd){
+      edStopPlay();
+      edPlayT = 0; edScroll = 0;
+      return;
+    }
+    edRafPlay = requestAnimationFrame(edPlayLoop);
+  }
+
+  function edStartPlay(){
+    if(edPlaying) return;
+    // Reset flags
+    notes.forEach(n=>{ n._edPlayed = n.start < edPlayT; n._edFlash = null; });
+    edPlaying = true;
+    edPlayBtn.innerHTML = '⏸ Pause';
+    edPlayBtn.classList.add('paused');
+    Audio.resume();
+    edRafPlay = requestAnimationFrame(edPlayLoop);
+  }
+
+  function edStopPlay(){
+    edPlaying = false;
+    edPlayBtn.innerHTML = '▶ Lecture';
+    edPlayBtn.classList.remove('paused');
+    if(edRafPlay){ cancelAnimationFrame(edRafPlay); edRafPlay=null; }
+    edLastTs = null;
+  }
+
+  edPlayBtn.addEventListener('click', ()=>{
+    if(edPlaying) edStopPlay();
+    else edStartPlay();
+  });
+
+  // Stoppe la lecture si on ferme l'éditeur
+  const _origClose = closeEditor;
+  closeEditor = function(){
+    edStopPlay();
+    _origClose();
+  };
+
   function closeEditor(){
     panel.classList.add('hidden');
     // Relayout pour restaurer les dimensions du canvas principal
@@ -3172,11 +3261,38 @@ Règles :
       edCtx.setLineDash([]);
     }
 
-    // ---- Curseur temps actuel ----
-    const xNow = timeToX(t, W);
-    if(xNow>=0 && xNow<=W){
-      edCtx.strokeStyle='rgba(255,212,121,.8)'; edCtx.lineWidth=1.5;
-      edCtx.beginPath(); edCtx.moveTo(xNow,0); edCtx.lineTo(xNow,H); edCtx.stroke();
+    // ---- Tête de lecture éditeur ----
+    // En lecture éditeur : suit edPlayT, sinon suit t (temps principal)
+    const playPos = edPlaying ? edPlayT : t;
+    const xPlay = timeToX(playPos, W);
+    if(xPlay>=0 && xPlay<=W){
+      // halo
+      edCtx.strokeStyle = edPlaying ? 'rgba(52,211,153,.9)' : 'rgba(255,212,121,.8)';
+      edCtx.lineWidth = edPlaying ? 2.5 : 1.5;
+      edCtx.shadowColor = edPlaying ? 'rgba(52,211,153,.5)' : 'transparent';
+      edCtx.shadowBlur  = edPlaying ? 8 : 0;
+      edCtx.beginPath(); edCtx.moveTo(xPlay,0); edCtx.lineTo(xPlay,H); edCtx.stroke();
+      edCtx.shadowBlur = 0;
+      // triangle indicateur en haut
+      edCtx.fillStyle = edPlaying ? 'rgba(52,211,153,.9)' : 'rgba(255,212,121,.8)';
+      edCtx.beginPath();
+      edCtx.moveTo(xPlay-7,0); edCtx.lineTo(xPlay+7,0); edCtx.lineTo(xPlay,10);
+      edCtx.closePath(); edCtx.fill();
+    }
+
+    // ---- Flash notes en cours de lecture ----
+    if(edPlaying){
+      const now = performance.now();
+      for(const n of notes){
+        if(n._edFlash && now - n._edFlash < 250){
+          const bx = timeToX(n.start, W);
+          const bw = Math.max(4, timeToX(n.start+n.dur, W)-bx);
+          const by = H*(1-(n.midi-minMidi)/(maxMidi-minMidi));
+          const age = (now-n._edFlash)/250;
+          edCtx.fillStyle = 'rgba(255,255,255,'+(0.7*(1-age))+')';
+          roundEdRect(bx,by-6,bw,12,3); edCtx.fill();
+        }
+      }
     }
   }
 
