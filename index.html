@@ -133,41 +133,60 @@
   /* ---- barre de progression ---- */
   .progressbar-wrap{
     position:absolute; bottom:0; left:0; right:0; z-index:10;
-    height:28px; cursor:pointer; padding:10px 0 0;
-    background:linear-gradient(0deg, rgba(6,5,14,.8) 0%, transparent 100%);
+    height:54px; cursor:pointer; padding:0;
+    background:linear-gradient(0deg, rgba(6,5,14,.85) 0%, transparent 100%);
+    display:flex; flex-direction:column; justify-content:flex-end;
   }
   .progressbar-track{
-    position:relative; height:5px; margin:0 16px;
-    background:rgba(255,255,255,.1); border-radius:3px; overflow:visible;
+    position:relative; height:8px; margin:0 16px 14px;
+    background:rgba(255,255,255,.12); border-radius:6px; overflow:visible;
   }
   /* zone de boucle */
   .loop-region{
-    position:absolute; top:-3px; height:11px; border-radius:3px;
-    background:rgba(255,159,67,.25); border:1px solid rgba(255,159,67,.6);
+    position:absolute; top:-6px; height:20px; border-radius:5px;
+    background:rgba(255,159,67,.22); border:1.5px solid rgba(255,159,67,.7);
     pointer-events:none;
   }
   /* remplissage de progression */
   .progressbar-fill{
-    position:absolute; left:0; top:0; height:100%; border-radius:3px;
+    position:absolute; left:0; top:0; height:100%; border-radius:6px;
     background:linear-gradient(90deg,var(--cyan-deep),var(--violet));
     pointer-events:none; transition:width .05s linear;
   }
   /* curseur (tête de lecture) */
   .progressbar-thumb{
-    position:absolute; top:50%; width:13px; height:13px; border-radius:50%;
-    background:#fff; box-shadow:0 0 10px rgba(150,200,255,.9);
+    position:absolute; top:50%; width:18px; height:18px; border-radius:50%;
+    background:#fff; box-shadow:0 0 12px rgba(150,200,255,.9);
     transform:translate(-50%,-50%); pointer-events:none;
   }
-  /* poignées de boucle */
+  /* poignées de boucle — grandes pour tablette */
   .loop-handle{
-    position:absolute; top:50%; width:10px; height:18px; border-radius:4px;
+    position:absolute; top:50%;
+    width:28px; height:44px; border-radius:8px;
     background:var(--loop); transform:translate(-50%,-50%);
-    cursor:ew-resize; z-index:4; box-shadow:0 0 8px rgba(255,159,67,.6);
+    cursor:ew-resize; z-index:4;
+    box-shadow:0 0 14px rgba(255,159,67,.7);
+    display:flex; align-items:center; justify-content:center;
+    touch-action:none;
   }
-  .loop-handle.right{ transform:translate(-50%,-50%); }
+  .loop-handle::after{
+    content:''; display:block;
+    width:3px; height:22px; border-radius:2px;
+    background:rgba(255,255,255,.6);
+    box-shadow:-4px 0 0 rgba(255,255,255,.3), 4px 0 0 rgba(255,255,255,.3);
+  }
+  /* étiquettes temps au-dessus des poignées */
+  .loop-handle-label{
+    position:absolute; bottom:calc(100% + 6px); left:50%;
+    transform:translateX(-50%);
+    font-size:11px; font-weight:600; color:var(--loop);
+    background:rgba(10,8,20,.85); padding:3px 8px; border-radius:8px;
+    border:1px solid rgba(255,159,67,.4); white-space:nowrap;
+    pointer-events:none;
+  }
   .progress-time{
-    position:absolute; bottom:7px; right:16px;
-    font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums; pointer-events:none;
+    position:absolute; bottom:18px; right:16px;
+    font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; pointer-events:none;
   }
 
   /* ---- loop hint ---- */
@@ -791,8 +810,12 @@
         <div class="loop-region"  id="loopRegion"  style="display:none"></div>
         <div class="progressbar-fill"  id="pbFill"  style="width:0%"></div>
         <div class="progressbar-thumb" id="pbThumb" style="left:0%"></div>
-        <div class="loop-handle"  id="loopHandleA" style="display:none;left:0%"></div>
-        <div class="loop-handle right" id="loopHandleB" style="display:none;left:100%"></div>
+        <div class="loop-handle"  id="loopHandleA" style="display:none;left:0%">
+          <div class="loop-handle-label" id="loopLabelA">0:00</div>
+        </div>
+        <div class="loop-handle right" id="loopHandleB" style="display:none;left:100%">
+          <div class="loop-handle-label" id="loopLabelB">0:00</div>
+        </div>
       </div>
       <div class="progress-time" id="progressTime">0:00 / 0:00</div>
     </div>
@@ -1837,6 +1860,11 @@ function updateLoopUI(){
     loopHandleB.style.left=(loopB*100)+'%';
     loopRegion.style.left=(loopA*100)+'%';
     loopRegion.style.width=((loopB-loopA)*100)+'%';
+    // Affiche les temps sur les étiquettes
+    const labelA = document.getElementById('loopLabelA');
+    const labelB = document.getElementById('loopLabelB');
+    if(labelA) labelA.textContent = fmtTime(loopA*songEnd);
+    if(labelB) labelB.textContent = fmtTime(loopB*songEnd);
   }
   loopBtn.classList.toggle('loop-on',loopActive);
 }
