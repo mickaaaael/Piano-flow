@@ -569,6 +569,12 @@
   }
   .btn-ed-action:hover{ opacity:.82; }
   .btn-ed-cut{   color:#fff;    background:linear-gradient(90deg,#e05252,#b02020); }
+  .btn-ed-arm{
+    color:var(--text); background:rgba(255,255,255,.08); border:1px solid var(--panel-line);
+  }
+  .btn-ed-arm.active{
+    color:#fff; background:linear-gradient(90deg,#e05252,#b02020); border-color:transparent;
+  }
   .btn-ed-undo{  color:var(--text); background:rgba(255,255,255,.1); border:1px solid var(--panel-line); }
   .btn-ed-export{ color:#0a0912; background:linear-gradient(90deg,var(--cyan),var(--violet)); }
   .btn-ed-close{  color:var(--muted); background:rgba(255,255,255,.07); border:1px solid var(--panel-line); }
@@ -1019,7 +1025,8 @@
 
   <!-- Bouton couper (mode cut) -->
   <div id="edCutBar" style="display:flex;gap:10px;align-items:center;flex-shrink:0">
-    <div style="flex:1;font-size:12px;color:var(--muted)" id="edCutInfo">Sélectionne une zone à couper en cliquant-glissant sur la partition</div>
+    <button class="btn-ed-action btn-ed-arm" id="edArmSelect">🎯 Activer la sélection</button>
+    <div style="flex:1;font-size:12px;color:var(--muted)" id="edCutInfo">Clique sur « Activer la sélection » puis clique-glisse sur la partition pour choisir une zone à couper</div>
     <button class="btn-ed-action btn-ed-cut hidden" id="edCutBtn">✂ Couper la sélection</button>
   </div>
 
@@ -2562,11 +2569,19 @@ pbTrack.addEventListener('pointerdown',e=>{
   pbTrack.setPointerCapture(e.pointerId);
   const f=trackFrac(e);
 
-  // est-on sur une poignée ?
+  // est-on sur une poignée ? (uniquement si la boucle est déjà activée)
   if(loopActive && Math.abs(f-loopA)<0.02){ pbDrag='loopA'; return; }
   if(loopActive && Math.abs(f-loopB)<0.02){ pbDrag='loopB'; return; }
 
-  // sinon : début d'une définition de zone ou simple seek
+  // Si la boucle n'est pas activée (bouton Boucle non cliqué), on ne fait QUE naviguer —
+  // aucune création de zone de boucle accidentelle en se déplaçant sur la barre.
+  if(!loopActive){
+    pbDrag='seek';
+    seekTo(f);
+    return;
+  }
+
+  // Boucle déjà activée : un glissé sur la barre redéfinit la zone
   pbDragStart=f;
   pbDrag='define';
   seekTo(f);
@@ -2575,14 +2590,14 @@ pbTrack.addEventListener('pointerdown',e=>{
 pbTrack.addEventListener('pointermove',e=>{
   if(!pbDrag)return;
   const f=trackFrac(e);
-  if(pbDrag==='loopA'){ loopA=Math.min(f,loopB-0.02); updateLoopUI(); }
+  if(pbDrag==='seek'){ seekTo(f); }
+  else if(pbDrag==='loopA'){ loopA=Math.min(f,loopB-0.02); updateLoopUI(); }
   else if(pbDrag==='loopB'){ loopB=Math.max(f,loopA+0.02); updateLoopUI(); }
   else if(pbDrag==='define'){
     if(Math.abs(f-pbDragStart)>0.02){
-      // on est en train de dessiner une zone
+      // on est en train de redessiner la zone (boucle déjà active)
       loopA=Math.min(f,pbDragStart);
       loopB=Math.max(f,pbDragStart);
-      if(!loopActive){loopActive=true;}
       updateLoopUI();
     } else {
       seekTo(f); // simple glissement = seek
@@ -2593,12 +2608,7 @@ pbTrack.addEventListener('pointermove',e=>{
 pbTrack.addEventListener('pointerup',e=>{
   const f=trackFrac(e);
   if(pbDrag==='define'){
-    if(Math.abs(f-pbDragStart)<0.02){
-      // simple clic → seek sans boucle
-      seekTo(f);
-    } else {
-      // zone définie → active la boucle, saut au début
-      loopActive=true;
+    if(Math.abs(f-pbDragStart)>=0.02){
       seekTo(loopA);
       updateLoopUI();
       showLoopHint();
@@ -3376,6 +3386,7 @@ Règles :
   let edMode = 'cut';          // 'cut' | 'delete' | 'add'
   let edHistory = [];          // pile annulation
   let edSelA = null, edSelB = null; // sélection coupe (en secondes)
+  let edSelectArmed = false; // il faut cliquer sur "Activer la sélection" avant de pouvoir couper
   let edDragging = false;
   let edAddMidi = null;        // note sélectionnée pour ajout
   let edAddDur  = 0.5;         // durée par défaut (noire)
@@ -3502,11 +3513,15 @@ Règles :
     document.querySelectorAll('.ed-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
     edWrap && (edWrap.className = 'editor-canvas-wrap mode-' + m);
     edSelA = null; edSelB = null; edAddMidi = null;
+    edSelectArmed = false;
+    const armBtn = document.getElementById('edArmSelect');
+    if(armBtn) armBtn.classList.remove('active');
     edCutBtn.classList.add('hidden');
     edKeyboard && edKeyboard.classList.toggle('hidden', m !== 'add');
+    document.getElementById('edCutBar').classList.toggle('hidden', m !== 'cut');
     updateStaffPreview();
     const hints = {
-      cut:    '<b>Mode Couper :</b> Clique-glisse sur la partition pour sélectionner une section, puis clique sur ✂ Couper.',
+      cut:    '<b>Mode Couper :</b> Clique sur « 🎯 Activer la sélection », puis clique-glisse sur la partition pour choisir une zone. Sans ça, tu peux naviguer et zoomer librement sans risque.',
       delete: '<b>Mode Supprimer :</b> Clique sur une barre colorée pour supprimer cette note.',
       add:    '<b>Mode Ajouter :</b> Choisis une note sur le clavier en bas, puis clique sur la partition pour la placer à cet endroit.'
     };
@@ -3583,6 +3598,7 @@ Règles :
     edDragging = true;
 
     if(edMode === 'cut'){
+      if(!edSelectArmed) return; // pas d'armement -> on ignore, laisse naviguer/zoomer tranquille
       edSelA = xToTime(x, w); edSelB = edSelA;
     }
     else if(edMode === 'delete'){
@@ -3620,7 +3636,7 @@ Règles :
     const {x, y, w, h} = edCanvasCoords(e);
     edMouseX = x; edMouseY = y;
 
-    if(edMode === 'cut' && edDragging){
+    if(edMode === 'cut' && edDragging && edSelectArmed){
       edSelB = xToTime(x, w);
       const tA = Math.min(edSelA, edSelB), tB = Math.max(edSelA, edSelB);
       const dur = (tB - tA).toFixed(1);
@@ -3804,9 +3820,22 @@ Règles :
       .map(n => n.start >= tB ? {...n, start: n.start - dur} : n);
     songEnd = notes.reduce((a,n)=>Math.max(a,n.start+n.dur),0);
     edSelA = null; edSelB = null;
+    edSelectArmed = false;
+    document.getElementById('edArmSelect').classList.remove('active');
     edCutBtn.classList.add('hidden');
-    edCutInfo.textContent = 'Section coupée !';
-    setTimeout(()=> edCutInfo.textContent = 'Sélectionne une zone à couper', 1500);
+    edCutInfo.textContent = 'Section coupée ! Clique à nouveau sur « Activer la sélection » pour en couper une autre.';
+    setTimeout(()=> edCutInfo.textContent = 'Clique sur « Activer la sélection » puis clique-glisse sur la partition pour choisir une zone à couper', 2200);
+  });
+
+  // ---- Armement de la sélection (nécessaire avant de pouvoir dessiner une zone) ----
+  document.getElementById('edArmSelect').addEventListener('click', ()=>{
+    edSelectArmed = !edSelectArmed;
+    document.getElementById('edArmSelect').classList.toggle('active', edSelectArmed);
+    edSelA = null; edSelB = null;
+    edCutBtn.classList.add('hidden');
+    edCutInfo.textContent = edSelectArmed
+      ? 'Sélection activée : clique-glisse sur la partition pour choisir une zone.'
+      : 'Clique sur « Activer la sélection » puis clique-glisse sur la partition pour choisir une zone à couper';
   });
 
   // ---- Annuler ----
