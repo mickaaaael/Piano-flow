@@ -121,6 +121,16 @@
   }
   .now-playing b{ color:var(--text); font-weight:600; text-transform:none; letter-spacing:0; font-size:13px; }
 
+  .exercise-hint{
+    position:absolute; top:34px; left:16px; right:16px; z-index:3; pointer-events:none;
+    font-size:12px; color:#c7b7ff; background:rgba(124,77,223,.14);
+    border:1px solid rgba(124,77,223,.35); border-radius:10px;
+    padding:8px 12px; max-width:520px; line-height:1.5;
+    display:none;
+  }
+  .exercise-hint.visible{ display:block; }
+  .exercise-hint b{ color:#e4d9ff; }
+
   .hud{
     position:absolute; top:10px; right:16px; z-index:3; pointer-events:none;
     display:flex; gap:16px; text-align:right;
@@ -784,6 +794,10 @@
         <input type="range" id="speed" min="0.3" max="1.4" step="0.05" value="1" />
         <span class="val" id="speedVal">1.0×</span>
       </div>
+      <div class="led-pill" id="progressPill" title="Ta progression par niveau">
+        <span class="led-dot"></span>
+        <span id="progressTxt">🎓 Progression</span>
+      </div>
       <div class="led-pill" id="ledPill" title="Ruban LED ESP32 — cliquer pour configurer">
         <span class="led-dot"></span>
         <span id="ledTxt">💡 LED</span>
@@ -806,6 +820,7 @@
 
   <div class="stage-wrap">
     <div class="now-playing">en cours · <b id="npName">Hymne à la joie</b></div>
+    <div class="exercise-hint" id="exerciseHint"></div>
     <div class="hud">
       <div class="stat"><span class="n" id="statHits">0</span><span class="l">justes</span></div>
       <div class="stat"><span class="n" id="statAcc">—</span><span class="l">précision</span></div>
@@ -996,6 +1011,18 @@
 
 <!-- ===== MODALE TOKEN GITHUB ===== -->
 <!-- ===== MODALE IP ESP32 ===== -->
+<!-- ===== MODALE PROGRESSION ===== -->
+<div class="token-modal-bg hidden" id="progressModalBg">
+  <div class="token-modal">
+    <h3>🎓 Ta progression</h3>
+    <p>Réussis au moins 70% de précision sur 3 morceaux d'un niveau pour débloquer le suivant.</p>
+    <div id="progressList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
+    <div class="token-btns">
+      <button class="btn-skip" id="progressClose">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <div class="token-modal-bg hidden" id="ledModalBg">
   <div class="token-modal">
     <h3>💡 Ruban LED ESP32</h3>
@@ -1131,7 +1158,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Gamme de Do (exercice, pas de basse)
   // ----------------------------------------------------------------
-  scale: { name:'Gamme de Do — exercice', level:'debutant', notes: seq([
+  scale: { name:'Gamme de Do majeur', level:'exercice', notes: seq([
     [60,QT],[62,QT],[64,QT],[65,QT],[67,QT],[69,QT],[71,QT],[72,QT],
     [72,QT],[71,QT],[69,QT],[67,QT],[65,QT],[64,QT],[62,QT],[60,HF],
     [60,QT],[64,QT],[67,QT],[72,QT],[67,QT],[64,QT],[60,HF],
@@ -1704,37 +1731,278 @@ const SONGS = {
     ], 'L')
   )},
 
+  // ==================================================================
+  // EXERCICES PÉDAGOGIQUES — méthodes de référence des professeurs
+  // ==================================================================
+
+  scale_g: { name:'Gamme de Sol majeur', level:'exercice', notes: seq([
+    [67,QT],[69,QT],[71,QT],[72,QT],[74,QT],[76,QT],[78,QT],[79,QT],
+    [79,QT],[78,QT],[76,QT],[74,QT],[72,QT],[71,QT],[69,QT],[67,HF],
+  ], 'R'), pedal:[], hasHands:false },
+
+  scale_f: { name:'Gamme de Fa majeur', level:'exercice', notes: seq([
+    [65,QT],[67,QT],[69,QT],[70,QT],[72,QT],[74,QT],[76,QT],[77,QT],
+    [77,QT],[76,QT],[74,QT],[72,QT],[70,QT],[69,QT],[67,QT],[65,HF],
+  ], 'R'), pedal:[], hasHands:false },
+
+  arpege_do: { name:'Arpège de Do majeur', level:'exercice', ...merge(
+    seq([
+      [60,QT],[64,QT],[67,QT],[72,QT],[67,QT],[64,QT],[60,HF],
+      [60,QT],[64,QT],[67,QT],[72,QT],[76,QT],[72,QT],[67,QT],[64,QT],[60,WH],
+    ], 'R'),
+    seq([ [48,WH],[48,WH] ], 'L')
+  )},
+
+  hanon_1: { name:'Hanon No.1 — exercice de mécanisme', level:'exercice', ...merge(
+    seq([
+      [60,s8],[64,s8],[65,s8],[67,s8],[69,s8],[67,s8],[65,s8],[64,s8],
+      [62,s8],[65,s8],[67,s8],[69,s8],[71,s8],[69,s8],[67,s8],[65,s8],
+      [64,s8],[67,s8],[69,s8],[71,s8],[72,s8],[71,s8],[69,s8],[67,s8],
+      [65,s8],[69,s8],[71,s8],[72,s8],[74,s8],[72,s8],[71,s8],[69,s8],
+      [67,s8],[65,s8],[64,s8],[62,s8],[60,HF],
+    ], 'R'),
+    seq([
+      [36,s8],[40,s8],[41,s8],[43,s8],[45,s8],[43,s8],[41,s8],[40,s8],
+      [38,s8],[41,s8],[43,s8],[45,s8],[47,s8],[45,s8],[43,s8],[41,s8],
+      [40,s8],[43,s8],[45,s8],[47,s8],[48,s8],[47,s8],[45,s8],[43,s8],
+      [41,s8],[45,s8],[47,s8],[48,s8],[50,s8],[48,s8],[47,s8],[45,s8],
+      [43,s8],[41,s8],[40,s8],[38,s8],[36,HF],
+    ], 'L')
+  )},
+
+  hanon_2: { name:'Hanon No.2 — exercice de mécanisme', level:'exercice', ...merge(
+    seq([
+      [60,s8],[62,s8],[64,s8],[65,s8],[67,s8],[65,s8],[64,s8],[62,s8],
+      [60,s8],[64,s8],[65,s8],[67,s8],[69,s8],[67,s8],[65,s8],[64,s8],
+      [62,s8],[65,s8],[67,s8],[69,s8],[71,s8],[69,s8],[67,s8],[65,s8],
+      [64,s8],[67,s8],[69,s8],[71,s8],[72,s8],[71,s8],[69,s8],[67,s8],
+      [65,s8],[64,s8],[62,s8],[60,HF],
+    ], 'R'),
+    seq([
+      [36,s8],[38,s8],[40,s8],[41,s8],[43,s8],[41,s8],[40,s8],[38,s8],
+      [36,s8],[40,s8],[41,s8],[43,s8],[45,s8],[43,s8],[41,s8],[40,s8],
+      [38,s8],[41,s8],[43,s8],[45,s8],[47,s8],[45,s8],[43,s8],[41,s8],
+      [40,s8],[43,s8],[45,s8],[47,s8],[48,s8],[47,s8],[45,s8],[43,s8],
+      [41,s8],[40,s8],[38,s8],[36,HF],
+    ], 'L')
+  )},
+
+  czerny_style: { name:'Exercice style Czerny — doigts égaux', level:'exercice', ...merge(
+    seq([
+      [60,s16],[62,s16],[64,s16],[65,s16],[67,s16],[65,s16],[64,s16],[62,s16],
+      [60,s16],[62,s16],[64,s16],[65,s16],[67,s16],[69,s16],[71,s16],[72,s16],
+      [72,s16],[71,s16],[69,s16],[67,s16],[65,s16],[64,s16],[62,s16],[60,s16],
+      [64,s16],[65,s16],[67,s16],[69,s16],[67,s16],[65,s16],[64,s16],[62,s16],
+      [60,HF],
+    ], 'R'),
+    seq([
+      [48,QT],[55,QT],[48,QT],[55,QT],
+      [48,QT],[55,QT],[48,QT],[55,QT],
+      [48,HF],
+    ], 'L')
+  )},
+
+  burgmuller_arabesque: { name:'L\u2019Arabesque (extrait) — Burgmüller', level:'exercice', ...merge(
+    seq([
+      [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
+      [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[73,s16],[71,s16],
+      [69,QT],[null,QT],
+      [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
+      [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[72,s16],[71,s16],
+      [69,HF],
+    ], 'R'),
+    seq([
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,HF],
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,HF],
+    ], 'L')
+  )},
+
+  // ------------------------------------------------------------------
+  // EXERCICES DE PÉDALE — apprendre QUAND et COMMENT l'utiliser
+  // ------------------------------------------------------------------
+
+  pedal_direct: { name:'Pédale rythmique (directe)', level:'exercice',
+    desc:'<b>Pédale directe :</b> tu appuies EN MÊME TEMPS que tu joues l\u2019accord, tu relâches juste avant le suivant. C\u2019est la technique la plus simple, utilisée dans les marches et les morceaux rythmés où chaque accord doit être bien détaché.',
+    ...merge(
+    seq([
+      [60,QT],[64,QT],[67,QT],[72,QT],
+      [65,QT],[69,QT],[72,QT],[77,QT],
+      [67,QT],[71,QT],[74,QT],[79,QT],
+      [60,WH],
+    ], 'R'),
+    seq([
+      [48,WH],[53,WH],[55,WH],[48,WH],
+    ], 'L'),
+    ped([[0,2],[2,4],[4,6],[6,8]])
+  )},
+
+  pedal_legato: { name:'Pédale legato (syncopée)', level:'exercice',
+    desc:'<b>Pédale syncopée :</b> tu joues d\u2019abord la nouvelle note, PUIS tu relâches et ré-appuies juste après. C\u2019est la technique standard en musique classique — elle relie les notes entre elles sans les faire se mélanger. Regarde bien : la pédale change juste après chaque nouvelle basse, jamais pile dessus.',
+    ...merge(
+    seq([
+      [64,WH],[67,WH],[72,WH],[76,WH],
+    ], 'R'),
+    seq([
+      [48,WH],[53,WH],[50,WH],[48,WH],
+    ], 'L'),
+    ped([[0.08,2.08],[2.08,4.08],[4.08,6.08],[6.08,8]])
+  )},
+
+  pedal_harmonie: { name:'Pédale et changements d\u2019harmonie', level:'exercice',
+    desc:'<b>Règle d\u2019or :</b> change de pédale à CHAQUE changement d\u2019accord, jamais au milieu. Ici l\u2019harmonie change 4 fois — écoute comme un mélange de deux accords différents sonnerait faux si tu gardais la pédale trop longtemps.',
+    ...merge(
+    seq([
+      [60,QT],[64,QT],[67,QT],[71,QT],[74,QT],[77,QT],[64,QT],[67,QT],[72,QT],[65,QT],[69,QT],[72,QT],
+    ], 'R'),
+    seq([
+      [48,HF],[43,HF],[45,HF],[41,HF],
+    ], 'L'),
+    ped([[0,2],[2,4],[4,6],[6,8]])
+  )},
+
+  pedal_sustain: { name:'Pédale pour relier les notes (arpège)', level:'exercice',
+    desc:'<b>Pédale de liaison :</b> les doigts ne peuvent pas tenir un arpège très étalé — la pédale s\u2019en charge à leur place et fait sonner toutes les notes ensemble comme un seul accord. Garde-la enfoncée pendant tout l\u2019arpège, relâche seulement au changement d\u2019harmonie.',
+    ...merge(
+    seq([
+      [48,s8],[55,s8],[60,s8],[64,s8],[67,s8],[72,s8],[76,s8],[79,HF],
+      [43,s8],[50,s8],[57,s8],[62,s8],[65,s8],[69,s8],[74,s8],[77,HF],
+    ], 'R'),
+    seq([], 'L'),
+    ped([[0,4],[4,8]])
+  )},
+
 };
 
 /* ---------- peuplement du sélecteur, groupé par niveau ---------- */
 const LEVEL_META = {
-  debutant:     { label: '🟢 Débutant',     order: 0 },
-  intermediaire:{ label: '🟡 Intermédiaire', order: 1 },
-  expert:       { label: '🔴 Expert',        order: 2 },
+  exercice:     { label: '🎓 Exercices',     order: 0, unlockThreshold: null },
+  debutant:     { label: '🟢 Débutant',      order: 1, unlockThreshold: 0.70 },
+  intermediaire:{ label: '🟡 Intermédiaire', order: 2, unlockThreshold: 0.70 },
+  expert:       { label: '🔴 Expert',        order: 3, unlockThreshold: 0.75 },
 };
+const LEVEL_ORDER = Object.keys(LEVEL_META).sort((a,b)=>LEVEL_META[a].order-LEVEL_META[b].order);
+
+/* ---------- progression : score par morceau, sauvegardé en local ---------- */
+const PROGRESS_KEY = 'pianoflow_progress';
+function loadProgress(){
+  try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function saveProgressEntry(songKey, accuracy){
+  const p = loadProgress();
+  const prevBest = p[songKey]?.best || 0;
+  p[songKey] = { best: Math.max(prevBest, accuracy), last: accuracy, playedAt: Date.now() };
+  localStorage.setItem(PROGRESS_KEY, JSON.stringify(p));
+  refreshProgressionUI();
+}
+function levelStats(lvl){
+  const p = loadProgress();
+  const keys = Object.keys(SONGS).filter(k => (SONGS[k].level||'intermediaire') === lvl);
+  const played = keys.filter(k => p[k]);
+  const avg = played.length ? played.reduce((a,k)=>a+p[k].best,0) / played.length : 0;
+  return { total: keys.length, played: played.length, avg };
+}
+function isLevelUnlocked(lvl){
+  const idx = LEVEL_ORDER.indexOf(lvl);
+  if(idx <= 0) return true;
+  const prevLvl = LEVEL_ORDER[idx-1];
+  const meta = LEVEL_META[prevLvl];
+  if(meta.unlockThreshold === null) return true;
+  const stats = levelStats(prevLvl);
+  const needed = Math.min(3, stats.total);
+  return stats.played >= needed && stats.avg >= meta.unlockThreshold;
+}
+
 function populateSongSelect(){
   const sel = document.getElementById('songSelect');
   if(!sel) return;
+  const currentVal = sel.value;
   sel.innerHTML = '';
   const groups = {};
   for(const [key, s] of Object.entries(SONGS)){
     const lvl = s.level || 'intermediaire';
     (groups[lvl] = groups[lvl] || []).push([key, s.name]);
   }
-  const orderedLevels = Object.keys(LEVEL_META).sort((a,b)=>LEVEL_META[a].order-LEVEL_META[b].order);
-  for(const lvl of orderedLevels){
+  const progress = loadProgress();
+  for(const lvl of LEVEL_ORDER){
     if(!groups[lvl]) continue;
+    const unlocked = isLevelUnlocked(lvl);
     const og = document.createElement('optgroup');
-    og.label = LEVEL_META[lvl].label;
+    og.label = LEVEL_META[lvl].label + (unlocked ? '' : ' 🔒 (verrouillé)');
     for(const [key, name] of groups[lvl]){
       const opt = document.createElement('option');
-      opt.value = key; opt.textContent = name;
+      opt.value = key;
+      const stars = progress[key] ? starsFor(progress[key].best) : '';
+      opt.textContent = (unlocked ? name : '🔒 ' + name) + (stars ? '  ' + stars : '');
+      opt.disabled = !unlocked;
       og.appendChild(opt);
     }
     sel.appendChild(og);
   }
+  if(currentVal && [...sel.options].some(o=>o.value===currentVal)) sel.value = currentVal;
+}
+function starsFor(acc){
+  if(acc >= 0.95) return '★★★';
+  if(acc >= 0.80) return '★★';
+  if(acc >= 0.60) return '★';
+  return '';
 }
 populateSongSelect();
+
+/* ---------- UI de progression : pill + modale ---------- */
+function refreshProgressionUI(){
+  populateSongSelect();
+  const pill = document.getElementById('progressPill');
+  if(!pill) return;
+  const txt = document.getElementById('progressTxt');
+  let unlockedCount = 0;
+  for(const lvl of LEVEL_ORDER) if(isLevelUnlocked(lvl)) unlockedCount++;
+  const currentLvl = LEVEL_ORDER[Math.min(unlockedCount, LEVEL_ORDER.length) - 1] || LEVEL_ORDER[0];
+  pill.classList.toggle('on', unlockedCount > 1);
+  txt.textContent = '🎓 ' + (LEVEL_META[currentLvl]?.label.replace(/^[^ ]+ /,'') || 'Progression');
+  renderProgressModal();
+}
+function renderProgressModal(){
+  const list = document.getElementById('progressList');
+  if(!list) return;
+  list.innerHTML = '';
+  for(const lvl of LEVEL_ORDER){
+    const meta = LEVEL_META[lvl];
+    const stats = levelStats(lvl);
+    const unlocked = isLevelUnlocked(lvl);
+    const pct = stats.total ? Math.round(100*stats.played/stats.total) : 0;
+    const accPct = Math.round(stats.avg*100);
+    const row = document.createElement('div');
+    row.style.cssText = 'background:rgba(255,255,255,.05);border:1px solid var(--panel-line);border-radius:12px;padding:12px 14px;';
+    row.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <b style="font-size:13px;${unlocked?'':'opacity:.5'}">${meta.label}${unlocked?'':' 🔒'}</b>
+        <span style="font-size:12px;color:var(--muted)">${stats.played}/${stats.total} joués${stats.played?' · '+accPct+'% moy.':''}</span>
+      </div>
+      <div style="height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--cyan),var(--violet));"></div>
+      </div>`;
+    list.appendChild(row);
+  }
+}
+if(document.getElementById('progressPill')){
+  document.getElementById('progressPill').addEventListener('click', ()=>{
+    renderProgressModal();
+    document.getElementById('progressModalBg').classList.remove('hidden');
+  });
+  document.getElementById('progressClose').addEventListener('click', ()=>{
+    document.getElementById('progressModalBg').classList.add('hidden');
+  });
+  document.getElementById('progressModalBg').addEventListener('click', e=>{
+    if(e.target.id==='progressModalBg') e.target.classList.add('hidden');
+  });
+}
+refreshProgressionUI();
+
 
 /* ---------- parseur MIDI ---------- */
 function parseMidi(buffer){
@@ -2013,10 +2281,10 @@ window.addEventListener('resize',()=>{
    Chargement morceau
    ============================================================ */
 function loadNotes(rawNotes,name){
-  // rawNotes : {notes, pedal?, hasHands?}  OU  tableau nu (legacy)
-  let src, ped=[], hh=false;
+  // rawNotes : {notes, pedal?, hasHands?, desc?}  OU  tableau nu (legacy)
+  let src, ped=[], hh=false, desc=null;
   if(Array.isArray(rawNotes)){ src=rawNotes; }
-  else { src=rawNotes.notes||[]; ped=rawNotes.pedal||[]; hh=rawNotes.hasHands||false; }
+  else { src=rawNotes.notes||[]; ped=rawNotes.pedal||[]; hh=rawNotes.hasHands||false; desc=rawNotes.desc||null; }
 
   notes=src.map(n=>({midi:n.midi,start:n.start,dur:n.dur,hand:n.hand||null,hit:false}));
   pedalEvents=ped;
@@ -2027,6 +2295,9 @@ function loadNotes(rawNotes,name){
   loopA=0; loopB=1;
   reset();
   document.getElementById('npName').textContent=name;
+  const hintEl=document.getElementById('exerciseHint');
+  if(desc){ hintEl.innerHTML=desc; hintEl.classList.add('visible'); }
+  else { hintEl.classList.remove('visible'); }
   updateLoopUI();
 }
 
@@ -2127,7 +2398,15 @@ function step(ts){
       }
     }
     t=nt;
-    if(t>songEnd+1.5){pauseFn();t=songEnd+1.5;}
+    if(t>songEnd+1.5){
+      pauseFn();t=songEnd+1.5;
+      const total=hits+wrongs;
+      if(total>=4){
+        const acc=hits/total;
+        const key=document.getElementById('songSelect').value;
+        if(key && SONGS[key]) saveProgressEntry(key, acc);
+      }
+    }
   }
   updateProgress();
   render();
