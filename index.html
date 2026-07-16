@@ -38,6 +38,12 @@
   /* ---- header ---- */
   header{ display:flex; align-items:center; gap:14px; padding:10px 18px 8px; flex-wrap:wrap; }
   .brand{ display:flex; align-items:baseline; gap:10px; margin-right:auto; }
+
+  .top-indicators{
+    position:fixed; top:14px; right:18px; z-index:60;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    justify-content:flex-end; max-width:60vw;
+  }
   .brand h1{
     font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:20px; letter-spacing:.04em;
     background:linear-gradient(92deg,var(--cyan),var(--violet));
@@ -758,6 +764,10 @@
     header{ padding:8px 12px; }
     .stage-wrap,.keyboard-wrap{ margin-left:8px; margin-right:8px; }
     .hud .stat .n{ font-size:17px; }
+    .top-indicators{
+      position:static; margin:6px 12px 0; max-width:none;
+      justify-content:flex-start;
+    }
   }
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
@@ -767,7 +777,6 @@
   <header>
     <div class="brand">
       <h1>PIANO&nbsp;FLOW</h1>
-      <span class="tag">regarde tomber les notes · joue quand elles touchent le clavier</span>
     </div>
     <div class="controls">
       <select id="songSelect" title="Choisir un morceau"></select>
@@ -801,18 +810,6 @@
         <span class="led-dot"></span>
         <span id="progressTxt">🎓 Progression</span>
       </div>
-      <div class="led-pill" id="ledPill" title="Ruban LED ESP32 — cliquer pour configurer">
-        <span class="led-dot"></span>
-        <span id="ledTxt">💡 LED</span>
-      </div>
-      <div class="sync-pill" id="syncPill" title="Synchronisation GitHub — cliquer pour configurer">
-        <span class="sync-dot"></span>
-        <span id="syncTxt">☁ Sync</span>
-      </div>
-      <div class="midi-pill" id="midiPill">
-        <span class="dot"></span>
-        <span id="midiTxt">Piano non connecté</span>
-      </div>
       <button id="editBtn" class="file" title="Modifier la partition — couper, supprimer, ajouter des notes">
         <span>✏️</span> Modifier
       </button>
@@ -820,6 +817,22 @@
       <button id="playBtn" class="primary"><span id="playIc">▶</span> <span id="playLbl">Lecture</span></button>
     </div>
   </header>
+
+  <!-- Voyants d'état, toujours visibles en haut à droite -->
+  <div class="top-indicators">
+    <div class="led-pill" id="ledPill" title="Ruban LED ESP32 — cliquer pour configurer">
+      <span class="led-dot"></span>
+      <span id="ledTxt">💡 LED</span>
+    </div>
+    <div class="sync-pill" id="syncPill" title="Synchronisation GitHub — cliquer pour configurer">
+      <span class="sync-dot"></span>
+      <span id="syncTxt">☁ Sync</span>
+    </div>
+    <div class="midi-pill" id="midiPill">
+      <span class="dot"></span>
+      <span id="midiTxt">Piano non connecté</span>
+    </div>
+  </div>
 
   <div class="stage-wrap">
     <div class="now-playing">en cours · <b id="npName">Hymne à la joie</b></div>
