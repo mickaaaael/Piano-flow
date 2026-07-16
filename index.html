@@ -852,6 +852,7 @@
     <div class="controls">
       <button id="playBtn" class="primary"><span id="playIc">▶</span> <span id="playLbl">Lecture</span></button>
       <button id="restartBtn" title="Recommencer">⟲</button>
+      <button id="fsBtn" title="Plein écran — masque le navigateur et ses onglets">⛶</button>
       <button id="modeBtn" class="toggle" title="Le morceau t'attend sur chaque note">
         <span>🎯</span> Entraînement
       </button>
@@ -2247,6 +2248,26 @@ document.querySelectorAll('#speedChips button').forEach(btn=>{
 });
 document.getElementById('restartBtn').addEventListener('click',()=>{reset();pauseFn();});
 document.getElementById('playBtn').addEventListener('click',()=>{Audio.resume();togglePlay();});
+
+/* ---- plein écran ---- */
+(function(){
+  const btn=document.getElementById('fsBtn');
+  function isFs(){ return !!(document.fullscreenElement||document.webkitFullscreenElement); }
+  function updateBtn(){
+    btn.textContent = isFs() ? '🗗' : '⛶';
+    btn.title = isFs() ? 'Quitter le plein écran' : 'Plein écran — masque le navigateur et ses onglets';
+  }
+  btn.addEventListener('click',()=>{
+    const el=document.documentElement;
+    if(!isFs()){
+      (el.requestFullscreen||el.webkitRequestFullscreen).call(el);
+    }else{
+      (document.exitFullscreen||document.webkitExitFullscreen).call(document);
+    }
+  });
+  document.addEventListener('fullscreenchange',()=>{ updateBtn(); setTimeout(layout,80); });
+  document.addEventListener('webkitfullscreenchange',()=>{ updateBtn(); setTimeout(layout,80); });
+})();
 
 /* ---- menu latéral ---- */
 (function(){
