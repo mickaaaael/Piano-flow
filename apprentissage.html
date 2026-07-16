@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Apprentissage — Piano Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg0:#0a0912; --bg1:#120e22;
+    --panel:rgba(28,22,48,.55); --panel-line:rgba(150,130,210,.18);
+    --text:#cec8df; --muted:#867ea3;
+    --cyan:#5fe3f2; --cyan-deep:#1fb6cf;
+    --violet:#c4a0ff; --violet-deep:#7c4ddf;
+    --correct:#34d399; --wrong:#fb6f8a; --gold:#ffd479;
+    --pedal:#a29bfe;
+    --shadow:0 10px 40px -12px rgba(0,0,0,.7);
+    font-synthesis:none;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100vh;
+    background:radial-gradient(1200px 800px at 20% -10%, #1a1430 0%, var(--bg0) 55%), var(--bg0);
+    color:var(--text); font-family:'Inter',sans-serif;
+  }
+  a{ color:inherit; text-decoration:none; }
+
+  header{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:18px 24px; border-bottom:1px solid var(--panel-line);
+    position:sticky; top:0; z-index:10;
+    background:rgba(10,8,18,.75); backdrop-filter:blur(14px);
+  }
+  header h1{
+    font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:700; margin:0;
+    background:linear-gradient(92deg,var(--cyan),var(--violet));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    margin-right:auto;
+  }
+  .back-btn{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:13px; color:var(--text);
+    background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:11px; padding:8px 14px; transition:border-color .15s;
+  }
+  .back-btn:hover{ border-color:rgba(170,150,235,.45); }
+
+  .progress-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--muted);
+    background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:11px; padding:7px 11px;
+  }
+  .progress-pill .dot{ width:8px; height:8px; border-radius:50%; background:var(--gold); box-shadow:0 0 8px var(--gold); }
+
+  main{ max-width:980px; margin:0 auto; padding:28px 20px 60px; }
+  .intro{ font-size:13.5px; color:var(--muted); margin-bottom:26px; line-height:1.6; max-width:640px; }
+  .intro b{ color:var(--text); }
+
+  .cases{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px; }
+
+  .case{
+    background:linear-gradient(160deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
+    border:1px solid var(--panel-line); border-radius:20px; padding:20px;
+    display:flex; flex-direction:column; gap:14px;
+    transition:border-color .2s, transform .15s;
+    position:relative; overflow:hidden;
+  }
+  .case.locked{ opacity:.55; }
+  .case::before{
+    content:''; position:absolute; inset:0; z-index:0; opacity:.08;
+    background:radial-gradient(circle at 90% -10%, var(--case-color,#fff), transparent 60%);
+    pointer-events:none;
+  }
+  .case-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; position:relative; z-index:1; }
+  .case-head h2{
+    font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700; margin:0;
+    color:var(--text);
+  }
+  .case-lock{ font-size:18px; }
+  .case-desc{ font-size:12.5px; color:var(--muted); line-height:1.55; position:relative; z-index:1; }
+
+  .case-progress-bar{
+    height:6px; border-radius:3px; background:rgba(255,255,255,.08); overflow:hidden;
+    position:relative; z-index:1;
+  }
+  .case-progress-fill{ height:100%; border-radius:3px; transition:width .3s; }
+
+  .case-stats{ font-size:11.5px; color:var(--muted); position:relative; z-index:1; }
+
+  .song-list{ display:flex; flex-direction:column; gap:6px; position:relative; z-index:1; max-height:280px; overflow-y:auto; padding-right:2px; }
+  .song-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-size:12.5px; padding:9px 11px; border-radius:10px;
+    background:rgba(255,255,255,.03); border:1px solid transparent;
+    transition:background .15s, border-color .15s;
+  }
+  .song-row.playable{ cursor:pointer; }
+  .song-row.playable:hover{ background:rgba(255,255,255,.08); border-color:var(--panel-line); }
+  .song-row .name{ flex:1; }
+  .song-row .stars{ color:var(--gold); font-size:11px; white-space:nowrap; }
+  .song-row.locked{ opacity:.5; cursor:not-allowed; }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(150,130,210,.3); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="back-btn">← Retour au piano</a>
+  <h1>🎓 Apprentissage</h1>
+  <div class="progress-pill">
+    <span class="dot"></span>
+    <span id="globalTxt">Chargement…</span>
+  </div>
+</header>
+
+<main>
+  <p class="intro">
+    Un vrai parcours pédagogique, indépendant de la bibliothèque libre du piano —
+    <b>ici tout se mérite</b>. Réussis les exercices d'un niveau pour débloquer le suivant.
+    Clique sur un morceau pour l'ouvrir directement dans l'appli, en mode Entraînement.
+  </p>
+  <div class="cases" id="casesGrid"></div>
+</main>
+
+<script>
+const CASES = [
+  { id:'pedale',        label:'🦶 Pédale',        color:'#a29bfe', always:true,  unlockedBy:null,
+     desc:'Comprends quand et comment utiliser la pédale forte — la technique la plus mal maîtrisée par les débutants.',
+     songs:[{"key": "pedal_direct", "name": "Pédale rythmique (directe)"}, {"key": "pedal_legato", "name": "Pédale legato (syncopée)"}, {"key": "pedal_harmonie", "name": "Pédale et changements d’harmonie"}, {"key": "pedal_sustain", "name": "Pédale pour relier les notes (arpège)"}] },
+  { id:'debutant',      label:'🟢 Débutant',      color:'#34d399', always:true,  unlockedBy:null,
+     desc:'Gammes, arpèges, exercices Hanon et premiers morceaux pour construire les bases.',
+     songs:[{"key": "ode", "name": "Hymne à la joie — Beethoven"}, {"key": "clair", "name": "Au clair de la lune — traditionnel"}, {"key": "scale", "name": "Gamme de Do majeur"}, {"key": "frere_jacques", "name": "Frère Jacques — traditionnel"}, {"key": "twinkle", "name": "Ah vous dirai-je maman — traditionnel"}, {"key": "menuet_bach", "name": "Menuet en Sol — Bach (attrib.)"}, {"key": "petit_train", "name": "Le petit train — exercice"}, {"key": "valse_do", "name": "Petite valse en Do — exercice"}, {"key": "scale_g", "name": "Gamme de Sol majeur"}, {"key": "scale_f", "name": "Gamme de Fa majeur"}, {"key": "arpege_do", "name": "Arpège de Do majeur"}, {"key": "hanon_1", "name": "Hanon No.1 — exercice de mécanisme"}, {"key": "hanon_2", "name": "Hanon No.2 — exercice de mécanisme"}, {"key": "czerny_style", "name": "Exercice style Czerny — doigts égaux"}, {"key": "burgmuller_arabesque", "name": "L’Arabesque (extrait) — Burgmüller"}] },
+  { id:'intermediaire', label:'🟡 Intermédiaire', color:'#ffd479', always:false, unlockedBy:'debutant', threshold:0.70,
+     desc:'Réussis 70% de précision sur 3 morceaux du niveau Débutant pour débloquer.',
+     songs:[{"key": "fur_elise", "name": "Für Elise — Beethoven"}, {"key": "bach_prelude", "name": "Prélude en Do — J.S. Bach"}, {"key": "gymnopedie", "name": "Gymnopédie No.1 — E. Satie"}, {"key": "gnossienne", "name": "Gnossienne No.1 — E. Satie"}, {"key": "rondo_turca", "name": "Rondo alla Turca — Mozart"}, {"key": "clair_de_lune", "name": "Clair de lune (extrait) — Debussy"}, {"key": "valse_minute", "name": "Valse minute (extrait) — Chopin"}, {"key": "reverie_schumann", "name": "Rêverie — Schumann"}, {"key": "habanera", "name": "Habanera (Carmen) — Bizet"}, {"key": "marche_turque", "name": "Marche turque (extrait 2) — Beethoven"}] },
+  { id:'expert',        label:'🔴 Expert',        color:'#fb6f8a', always:false, unlockedBy:'intermediaire', threshold:0.75,
+     desc:'Réussis 75% de précision sur 3 morceaux du niveau Intermédiaire pour débloquer.',
+     songs:[{"key": "nocturne", "name": "Nocturne Op.9 No.2 — Chopin"}, {"key": "canon", "name": "Canon en Ré — Pachelbel"}, {"key": "walkyries", "name": "Chevauchée des Walkyries — Wagner (Apocalypse Now)"}, {"key": "zarathoustra", "name": "Ainsi parlait Zarathoustra (ouverture) — R. Strauss (2001, l’Odyssée de l’espace)"}, {"key": "toccata_bach", "name": "Toccata en Ré mineur (ouverture) — J.S. Bach"}, {"key": "danse_macabre", "name": "Danse macabre — Saint-Saëns"}, {"key": "mont_chauve", "name": "Une nuit sur le mont Chauve (extrait) — Moussorgski"}, {"key": "mont_roi", "name": "Dans l’antre du roi de la montagne — Grieg"}] },
+];
+
+const PROGRESS_KEY = 'pianoflow_progress';
+function loadProgress(){
+  try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function starsFor(acc){
+  if(acc >= 0.95) return '★★★';
+  if(acc >= 0.80) return '★★';
+  if(acc >= 0.60) return '★';
+  return '';
+}
+function caseStats(c){
+  const p = loadProgress();
+  const keys = c.songs.map(s=>s.key);
+  const played = keys.filter(k=>p[k]);
+  const avg = played.length ? played.reduce((a,k)=>a+p[k].best,0)/played.length : 0;
+  return { total: keys.length, played: played.length, avg };
+}
+function isUnlocked(c){
+  if(c.always) return true;
+  const parent = CASES.find(x=>x.id===c.unlockedBy);
+  if(!parent) return true;
+  const stats = caseStats(parent);
+  const needed = Math.min(3, stats.total);
+  return stats.played >= needed && stats.avg >= c.threshold;
+}
+
+function render(){
+  const grid = document.getElementById('casesGrid');
+  grid.innerHTML = '';
+  const progress = loadProgress();
+  let unlockedCount = 0;
+
+  for(const c of CASES){
+    const unlocked = isUnlocked(c);
+    if(unlocked) unlockedCount++;
+    const stats = caseStats(c);
+    const pct = stats.total ? Math.round(100*stats.played/stats.total) : 0;
+
+    const el = document.createElement('div');
+    el.className = 'case' + (unlocked ? '' : ' locked');
+    el.style.setProperty('--case-color', c.color);
+
+    const songsHtml = c.songs.map(s=>{
+      const best = progress[s.key]?.best;
+      const stars = best ? starsFor(best) : '';
+      if(unlocked){
+        return `<div class="song-row playable" data-key="${s.key}">
+          <span class="name">${s.name}</span>
+          <span class="stars">${stars}</span>
+        </div>`;
+      }
+      return `<div class="song-row locked">
+        <span class="name">🔒 ${s.name}</span>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="case-head">
+        <h2>${c.label}</h2>
+        <span class="case-lock">${unlocked ? '' : '🔒'}</span>
+      </div>
+      <div class="case-desc">${c.desc}</div>
+      <div class="case-progress-bar"><div class="case-progress-fill" style="width:${pct}%;background:${c.color}"></div></div>
+      <div class="case-stats">${stats.played}/${stats.total} morceaux joués${stats.played ? ' · ' + Math.round(stats.avg*100) + '% de précision moyenne' : ''}</div>
+      <div class="song-list">${songsHtml}</div>
+    `;
+    grid.appendChild(el);
+
+    el.querySelectorAll('.song-row.playable').forEach(row=>{
+      row.addEventListener('click', ()=>{
+        location.href = 'index.html?song=' + encodeURIComponent(row.dataset.key);
+      });
+    });
+  }
+
+  const globalTxt = document.getElementById('globalTxt');
+  const currentCase = CASES[Math.min(unlockedCount, CASES.length) - 1] || CASES[0];
+  globalTxt.textContent = 'Niveau actuel : ' + currentCase.label.replace(/^[^ ]+ /,'');
+}
+
+render();
+</script>
+</body>
+</html>

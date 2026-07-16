@@ -45,16 +45,16 @@
   }
   .brand .tag{ font-size:11px; color:var(--muted); letter-spacing:.02em; }
   .controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  button, select, label.file{
+  button, select, label.file, a.file{
     font-family:'Inter',sans-serif; font-size:13px; color:var(--text);
     background:var(--panel); border:1px solid var(--panel-line);
     border-radius:11px; padding:8px 12px; cursor:pointer; backdrop-filter:blur(8px);
     transition:border-color .15s, transform .08s, background .15s;
-    display:inline-flex; align-items:center; gap:6px;
+    display:inline-flex; align-items:center; gap:6px; text-decoration:none;
   }
-  button:hover,select:hover,label.file:hover{ border-color:rgba(170,150,235,.45); }
+  button:hover,select:hover,label.file:hover,a.file:hover{ border-color:rgba(170,150,235,.45); }
   button:active{ transform:translateY(1px); }
-  button:focus-visible,select:focus-visible,label.file:focus-within{ outline:2px solid var(--cyan); outline-offset:2px; }
+  button:focus-visible,select:focus-visible,label.file:focus-within,a.file:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
   button.primary{
     background:linear-gradient(95deg,rgba(95,227,242,.22),rgba(196,160,255,.22));
     border-color:rgba(150,200,255,.4); font-weight:600;
@@ -771,6 +771,9 @@
     </div>
     <div class="controls">
       <select id="songSelect" title="Choisir un morceau"></select>
+      <a href="apprentissage.html" class="file" id="learnBtn" title="Ouvrir la page Apprentissage — exercices progressifs">
+        <span>🎓</span> Apprentissage
+      </a>
       <label class="file" tabindex="0" title="Charger un fichier .mid">
         <span>📁</span> Fichier MIDI
         <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
@@ -1930,15 +1933,13 @@ function populateSongSelect(){
   const progress = loadProgress();
   for(const lvl of LEVEL_ORDER){
     if(!groups[lvl]) continue;
-    const unlocked = isLevelUnlocked(lvl);
     const og = document.createElement('optgroup');
-    og.label = LEVEL_META[lvl].label + (unlocked ? '' : ' 🔒 (verrouillé)');
+    og.label = LEVEL_META[lvl].label;
     for(const [key, name] of groups[lvl]){
       const opt = document.createElement('option');
       opt.value = key;
       const stars = progress[key] ? starsFor(progress[key].best) : '';
-      opt.textContent = (unlocked ? name : '🔒 ' + name) + (stars ? '  ' + stars : '');
-      opt.disabled = !unlocked;
+      opt.textContent = name + (stars ? '  ' + stars : '');
       og.appendChild(opt);
     }
     sel.appendChild(og);
@@ -4349,8 +4350,19 @@ const LedStrip = (()=>{
 LedStrip.init();
 GistSync.init();
 GistSync.restoreAll();
-const startSong=SONGS.ode;
-loadNotes(startSong.notes,startSong.name);
+
+// Si on arrive depuis la page Apprentissage avec ?song=cle, on charge cet exercice
+const urlSongKey = new URLSearchParams(location.search).get('song');
+const startSong = (urlSongKey && SONGS[urlSongKey]) ? SONGS[urlSongKey] : SONGS.ode;
+loadNotes(startSong, startSong.name);
+if(urlSongKey && SONGS[urlSongKey]){
+  const sel = document.getElementById('songSelect');
+  if(sel) sel.value = urlSongKey;
+  // Ouvre directement en mode entraînement, pratique pour un exercice ciblé
+  if(mode !== 'practice'){
+    document.getElementById('modeBtn').click();
+  }
+}
 initMIDI();
 // Re-layout après que le DOM soit complètement rendu
 setTimeout(()=>{
