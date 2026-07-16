@@ -4,9 +4,10 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Piano Flow — apprends en regardant tomber les notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
-
   :root{
     --bg0:#0a0912; --bg1:#120e22; --stage-top:#0d0b1c; --stage-bot:#06050e;
     --panel:rgba(28,22,48,.55); --panel-line:rgba(150,130,210,.18);
@@ -25,6 +26,13 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
+  /* ---- base tactile (Surface / tablette) ---- */
+  button, select, label.file, a.file, .led-pill, .sync-pill, .midi-pill,
+  .hand-select, .speed, .ed-tab, .sheet-tab, .loop-handle, .key{
+    touch-action:manipulation;
+    user-select:none; -webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
   body{
     background:
       radial-gradient(1200px 600px at 50% -10%, rgba(124,77,223,.18), transparent 60%),
@@ -36,8 +44,41 @@
   .app{ height:100dvh; height:100vh; display:flex; flex-direction:column; max-width:1500px; margin:0 auto; }
 
   /* ---- header ---- */
-  header{ display:flex; align-items:center; gap:14px; padding:10px 18px 8px; flex-wrap:wrap; }
+  header{ display:flex; align-items:center; gap:12px; padding:10px 18px 8px; flex-wrap:wrap; }
   .brand{ display:flex; align-items:baseline; gap:10px; margin-right:auto; }
+  .menu-btn{ font-size:19px; padding:10px 15px; min-width:48px; }
+
+  /* ---- menu latéral ---- */
+  .side-menu-bg{
+    position:fixed; inset:0; z-index:70; background:rgba(6,5,14,.65);
+    opacity:0; pointer-events:none; transition:opacity .22s;
+  }
+  .side-menu-bg.open{ opacity:1; pointer-events:auto; }
+  .side-menu{
+    position:fixed; top:0; left:0; bottom:0; z-index:71;
+    width:310px; max-width:86vw;
+    background:linear-gradient(165deg,#181231,#0d0a1c);
+    border-right:1px solid var(--panel-line);
+    transform:translateX(-105%); transition:transform .26s cubic-bezier(.2,.8,.25,1);
+    display:flex; flex-direction:column; gap:10px;
+    padding:16px; overflow-y:auto;
+    box-shadow:24px 0 70px rgba(0,0,0,.55);
+  }
+  .side-menu.open{ transform:translateX(0); }
+  .side-menu .sm-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .side-menu .sm-head h2{
+    font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:700;
+    background:linear-gradient(92deg,var(--cyan),var(--violet));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .side-menu .sm-close{ min-width:44px; padding:8px; font-size:15px; }
+  .side-menu .sm-section{
+    font-size:11px; color:var(--muted); letter-spacing:.09em; text-transform:uppercase;
+    margin:8px 2px 0;
+  }
+  .side-menu .file, .side-menu select, .side-menu .led-pill{
+    width:100%; justify-content:flex-start;
+  }
 
   .top-indicators{
     position:fixed; top:14px; right:18px; z-index:60;
@@ -55,14 +96,20 @@
     flex-basis:100%; width:100%; margin-top:4px;
   }
   button, select, label.file, a.file{
-    font-family:'Inter',sans-serif; font-size:13px; color:var(--text);
+    font-family:'Inter',sans-serif; font-size:14px; color:var(--text);
     background:var(--panel); border:1px solid var(--panel-line);
-    border-radius:11px; padding:8px 12px; cursor:pointer; backdrop-filter:blur(8px);
+    border-radius:12px; padding:10px 16px; cursor:pointer;
+    min-height:44px;
     transition:border-color .15s, transform .08s, background .15s;
-    display:inline-flex; align-items:center; gap:6px; text-decoration:none;
+    display:inline-flex; align-items:center; justify-content:center; gap:7px; text-decoration:none;
   }
-  button:hover,select:hover,label.file:hover,a.file:hover{ border-color:rgba(170,150,235,.45); }
-  button:active{ transform:translateY(1px); }
+  @media(hover:hover){
+    @media(hover:hover){ button:hover,select:hover,label.file:hover,a.file:hover{ border-color:rgba(170,150,235,.45); } }
+  }
+  button:active,label.file:active,a.file:active{
+    transform:scale(.96);
+    background:rgba(255,255,255,.12);
+  }
   button:focus-visible,select:focus-visible,label.file:focus-within,a.file:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
   button.primary{
     background:linear-gradient(95deg,rgba(95,227,242,.22),rgba(196,160,255,.22));
@@ -82,11 +129,11 @@
   .hand-select{
     display:none; align-items:center; gap:3px;
     background:var(--panel); border:1px solid var(--panel-line);
-    border-radius:11px; padding:3px; backdrop-filter:blur(8px);
+    border-radius:12px; padding:3px;
   }
   .hand-select.visible{ display:inline-flex; }
   .hand-select button{
-    font-size:12px; padding:5px 10px; border-radius:8px;
+    font-size:13px; padding:8px 14px; border-radius:9px; min-height:38px;
     border:none; background:none; color:var(--muted);
     cursor:pointer; transition:background .15s, color .15s;
   }
@@ -101,19 +148,22 @@
     background-repeat:no-repeat; background-position:right 10px center;
   }
   input[type=file]{ display:none; }
-  .speed{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
-  .speed input[type=range]{
-    -webkit-appearance:none; appearance:none; width:80px; height:4px; border-radius:4px;
-    background:linear-gradient(90deg,var(--cyan-deep),var(--violet)); outline:none;
+  .speed{
+    display:inline-flex; align-items:center; gap:3px;
+    background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:12px; padding:3px;
   }
-  .speed input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
-    background:#fff; box-shadow:0 0 8px rgba(150,200,255,.8); cursor:pointer;
+  .speed .speed-lbl{ font-size:12px; color:var(--muted); padding:0 8px 0 10px; }
+  .speed button{
+    font-size:13px; padding:8px 12px; border-radius:9px; min-height:38px;
+    border:none; background:none; color:var(--muted);
+    cursor:pointer; transition:background .15s, color .15s;
+    font-variant-numeric:tabular-nums;
   }
-  .speed input[type=range]::-moz-range-thumb{
-    width:14px;height:14px;border:none;border-radius:50%;background:#fff;cursor:pointer;
+  .speed button.active{
+    background:rgba(95,227,242,.16); color:var(--cyan); font-weight:600;
   }
-  .speed .val{ min-width:32px; color:var(--text); font-variant-numeric:tabular-nums; text-align:right; }
+  .speed button:active{ transform:scale(.94); }
 
   /* ---- stage ---- */
   .stage-wrap{
@@ -157,8 +207,8 @@
     display:flex; flex-direction:column; justify-content:flex-end;
   }
   .progressbar-track{
-    position:relative; height:8px; margin:0 16px 14px;
-    background:rgba(255,255,255,.12); border-radius:6px; overflow:visible;
+    position:relative; height:12px; margin:0 16px 14px;
+    background:rgba(255,255,255,.12); border-radius:7px; overflow:visible;
   }
   /* zone de boucle */
   .loop-region{
@@ -168,13 +218,13 @@
   }
   /* remplissage de progression */
   .progressbar-fill{
-    position:absolute; left:0; top:0; height:100%; border-radius:6px;
+    position:absolute; left:0; top:0; height:100%; border-radius:7px;
     background:linear-gradient(90deg,var(--cyan-deep),var(--violet));
-    pointer-events:none; transition:width .05s linear;
+    pointer-events:none;
   }
   /* curseur (tête de lecture) */
   .progressbar-thumb{
-    position:absolute; top:50%; width:18px; height:18px; border-radius:50%;
+    position:absolute; top:50%; width:22px; height:22px; border-radius:50%;
     background:#fff; box-shadow:0 0 12px rgba(150,200,255,.9);
     transform:translate(-50%,-50%); pointer-events:none;
   }
@@ -224,7 +274,7 @@
     display:inline-flex; align-items:center; gap:8px;
     font-size:12px; color:var(--muted);
     background:var(--panel); border:1px solid var(--panel-line);
-    border-radius:11px; padding:8px 13px; backdrop-filter:blur(8px);
+    border-radius:12px; padding:11px 14px; min-height:42px;
     transition:border-color .3s, background .3s;
   }
   .midi-pill.live{
@@ -266,7 +316,7 @@
     opacity:.85; box-shadow:0 0 18px rgba(150,200,255,.5);
   }
   .keyboard{ position:relative; width:100%; }
-  .key{ position:absolute; bottom:0; cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; }
+  .key{ position:absolute; bottom:0; cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; touch-action:none; }
   .key.white{
     background:linear-gradient(180deg,#fff,var(--ivory) 18%,var(--ivory-shadow));
     border-radius:0 0 6px 6px;
@@ -313,7 +363,8 @@
   .sheet-modal-bg{
     position:fixed; inset:0; z-index:60;
     background:rgba(6,5,14,.88); backdrop-filter:blur(12px);
-    display:flex; align-items:center; justify-content:center; padding:20px;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:6vh 20px 20px; overflow-y:auto;
   }
   .sheet-modal{
     background:linear-gradient(145deg,#1a1530,#110d20);
@@ -357,21 +408,21 @@
     background:none; border:1px solid var(--panel-line); border-radius:10px;
     padding:9px 16px; cursor:pointer; transition:border-color .15s;
   }
-  .sheet-btns .btn-cancel:hover{ border-color:rgba(150,130,210,.5); }
+  @media(hover:hover){ .sheet-btns .btn-cancel:hover{ border-color:rgba(150,130,210,.5); } }
   .sheet-btns .btn-add{
     font-family:"Inter",sans-serif; font-size:13px; font-weight:600; color:#0a0912;
     background:linear-gradient(90deg,var(--cyan),var(--violet));
     border:none; border-radius:10px; padding:9px 20px; cursor:pointer;
     transition:opacity .15s; display:none;
   }
-  .sheet-btns .btn-add:hover{ opacity:.88; }
+  @media(hover:hover){ .sheet-btns .btn-add:hover{ opacity:.88; } }
 
   /* ---- onglets de la modale ---- */
   .sheet-tabs{ display:flex; gap:0; margin-bottom:18px; border-bottom:1px solid rgba(150,130,210,.2); }
   .sheet-tab{
     font-family:"Inter",sans-serif; font-size:13px; color:var(--muted);
     background:none; border:none; border-bottom:2px solid transparent;
-    padding:8px 18px; cursor:pointer; transition:color .15s,border-color .15s;
+    padding:12px 18px; min-height:44px; cursor:pointer; transition:color .15s,border-color .15s;
     margin-bottom:-1px;
   }
   .sheet-tab.active{ color:var(--cyan); border-bottom-color:var(--cyan); }
@@ -393,10 +444,10 @@
     border:none; border-radius:10px; padding:10px 16px; cursor:pointer;
     white-space:nowrap; transition:opacity .15s; flex-shrink:0;
   }
-  .url-row .btn-fetch:hover{ opacity:.88; }
+  @media(hover:hover){ .url-row .btn-fetch:hover{ opacity:.88; } }
   .url-hints{ font-size:11.5px; color:var(--muted); line-height:1.7; margin-bottom:4px; }
   .url-hints a{ color:var(--cyan); text-decoration:none; }
-  .url-hints a:hover{ text-decoration:underline; }
+  @media(hover:hover){ .url-hints a:hover{ text-decoration:underline; } }
 
   /* ---- zone drop photo ---- */
   .photo-drop{
@@ -404,7 +455,7 @@
     padding:24px 16px; text-align:center; margin-bottom:14px;
     cursor:pointer; transition:border-color .15s; color:var(--muted); font-size:13px;
   }
-  .photo-drop:hover{ border-color:rgba(95,227,242,.5); color:var(--text); }
+  @media(hover:hover){ .photo-drop:hover{ border-color:rgba(95,227,242,.5); color:var(--text); } }
   .photo-drop input{ display:none; }
   .photo-drop .icon{ font-size:28px; display:block; margin-bottom:6px; }
 
@@ -473,7 +524,7 @@
     position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
     z-index:8; pointer-events:none;
     display:flex; align-items:center; gap:10px;
-    background:rgba(8,6,18,.72); backdrop-filter:blur(10px);
+    background:rgba(8,6,18,.92);
     border:1px solid rgba(150,130,210,.25); border-radius:20px;
     padding:10px 22px; opacity:0; transition:opacity .18s;
     white-space:nowrap;
@@ -497,7 +548,8 @@
   .name-dialog-bg{
     position:fixed; inset:0; z-index:50;
     background:rgba(6,5,14,.75); backdrop-filter:blur(8px);
-    display:flex; align-items:center; justify-content:center;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:6vh 20px 20px; overflow-y:auto;
   }
   .name-dialog{
     background:linear-gradient(145deg,#1a1530,#110d20);
@@ -524,13 +576,13 @@
     background:none; border:1px solid var(--panel-line); border-radius:10px;
     padding:8px 16px; cursor:pointer; transition:border-color .15s;
   }
-  .name-dialog .btn-cancel:hover{ border-color:rgba(150,130,210,.5); }
+  @media(hover:hover){ .name-dialog .btn-cancel:hover{ border-color:rgba(150,130,210,.5); } }
   .name-dialog .btn-ok{
     font-family:"Inter",sans-serif; font-size:13px; font-weight:600; color:#0a0912;
     background:linear-gradient(90deg,var(--cyan),var(--violet));
     border:none; border-radius:10px; padding:8px 20px; cursor:pointer; transition:opacity .15s;
   }
-  .name-dialog .btn-ok:hover{ opacity:.88; }
+  @media(hover:hover){ .name-dialog .btn-ok:hover{ opacity:.88; } }
 
   /* ===== PANNEAU EDITEUR ===== */
   .editor-panel{
@@ -554,7 +606,7 @@
   .ed-tab{
     font-family:"Inter",sans-serif; font-size:12px; color:var(--muted);
     background:rgba(255,255,255,.06); border:1px solid var(--panel-line);
-    border-radius:9px; padding:7px 13px; cursor:pointer; transition:all .15s;
+    border-radius:10px; padding:11px 16px; min-height:42px; cursor:pointer; transition:all .15s;
   }
   .ed-tab.active{ color:var(--text); border-color:var(--cyan); background:rgba(95,227,242,.12); }
   /* boutons action */
@@ -567,10 +619,11 @@
   .ed-hint b{ color:var(--text); }
   .btn-ed-action{
     font-family:"Inter",sans-serif; font-size:12px; font-weight:600;
-    border:none; border-radius:9px; padding:8px 15px; cursor:pointer;
+    border:none; border-radius:10px; padding:10px 17px; min-height:42px; cursor:pointer;
     display:inline-flex; align-items:center; gap:6px; transition:opacity .15s; white-space:nowrap;
   }
-  .btn-ed-action:hover{ opacity:.82; }
+  @media(hover:hover){ .btn-ed-action:hover{ opacity:.82; } }
+  .btn-ed-action:active,.ed-tab:active,.btn-ed-play:active,.sheet-tab:active{ transform:scale(.96); }
   .btn-ed-cut{   color:#fff;    background:linear-gradient(90deg,#e05252,#b02020); }
   .btn-ed-arm{
     color:var(--text); background:rgba(255,255,255,.08); border:1px solid var(--panel-line);
@@ -595,22 +648,22 @@
   .btn-zoom{
     font-size:18px; font-weight:700; color:var(--text);
     background:rgba(255,255,255,.09); border:1px solid var(--panel-line);
-    border-radius:8px; width:36px; height:36px; cursor:pointer;
+    border-radius:10px; width:46px; height:46px; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
     transition:background .15s; line-height:1; padding:0;
   }
-  .btn-zoom:hover{ background:rgba(255,255,255,.18); }
+  @media(hover:hover){ .btn-zoom:hover{ background:rgba(255,255,255,.18); } }
   .btn-zoom:active{ transform:scale(.93); }
 
   /* bouton lecture dans l'éditeur */
   .btn-ed-play{
     font-family:"Inter",sans-serif; font-size:13px; font-weight:600;
     color:#0a0912; background:linear-gradient(90deg,var(--correct),#1aad7a);
-    border:none; border-radius:9px; padding:8px 16px; cursor:pointer;
+    border:none; border-radius:10px; padding:10px 18px; min-height:44px; cursor:pointer;
     display:inline-flex; align-items:center; gap:7px; transition:opacity .15s;
-    min-width:100px; justify-content:center;
+    min-width:110px; justify-content:center;
   }
-  .btn-ed-play:hover{ opacity:.85; }
+  @media(hover:hover){ .btn-ed-play:hover{ opacity:.85; } }
   .btn-ed-play.paused{ background:linear-gradient(90deg,#f59e0b,#d97706); }
   /* canvas éditeur */
   .editor-canvas-wrap{
@@ -661,8 +714,8 @@
   }
   .ed-key.white{ background:#e8e2d5; z-index:1; border-right:1px solid #ccc; }
   .ed-key.black{ background:#1a1228; z-index:2; }
-  .ed-key:hover.white{ background:#9fe9f4; }
-  .ed-key:hover.black{ background:#1fb6cf; }
+  @media(hover:hover){ .ed-key:hover.white{ background:#9fe9f4; } }
+  @media(hover:hover){ .ed-key:hover.black{ background:#1fb6cf; } }
   .ed-key.selected{ background:var(--correct) !important; }
   /* info note survolée */
   .ed-note-info{
@@ -682,7 +735,8 @@
   .token-modal-bg{
     position:fixed; inset:0; z-index:80;
     background:rgba(6,5,14,.92); backdrop-filter:blur(14px);
-    display:flex; align-items:center; justify-content:center; padding:20px;
+    display:flex; align-items:flex-start; justify-content:center;
+    padding:6vh 20px 20px; overflow-y:auto;
   }
   .token-modal{
     background:linear-gradient(145deg,#1a1530,#110d20);
@@ -711,7 +765,7 @@
     border-radius:10px; padding:10px 12px; cursor:pointer; color:var(--muted);
     transition:color .15s;
   }
-  .token-row .btn-show:hover{ color:var(--text); }
+  @media(hover:hover){ .token-row .btn-show:hover{ color:var(--text); } }
   .token-btns{ display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
   .token-btns .btn-skip{
     font-family:"Inter",sans-serif; font-size:13px; color:var(--muted);
@@ -729,13 +783,16 @@
 
   /* indicateur LED dans le header */
   .led-pill{
-    display:inline-flex; align-items:center; gap:6px;
+    display:inline-flex; align-items:center; gap:7px;
     font-size:12px; color:var(--muted);
     background:var(--panel); border:1px solid var(--panel-line);
-    border-radius:11px; padding:7px 11px; cursor:pointer;
+    border-radius:12px; padding:11px 13px; min-height:42px; cursor:pointer;
     transition:border-color .2s, color .2s;
+    touch-action:manipulation; user-select:none; -webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
   }
-  .led-pill:hover{ border-color:rgba(150,130,210,.5); }
+  @media(hover:hover){ .led-pill:hover{ border-color:rgba(150,130,210,.5); } }
+  .led-pill:active{ transform:scale(.96); }
   .led-pill.on{ border-color:rgba(255,159,67,.5); color:#ffd8a8; }
   .led-pill.err{ border-color:rgba(251,111,138,.4); color:var(--muted); }
   .led-pill .led-dot{
@@ -749,13 +806,16 @@
 
   /* indicateur sync dans le header */
   .sync-pill{
-    display:inline-flex; align-items:center; gap:6px;
+    display:inline-flex; align-items:center; gap:7px;
     font-size:12px; color:var(--muted);
     background:var(--panel); border:1px solid var(--panel-line);
-    border-radius:11px; padding:7px 11px; cursor:pointer;
+    border-radius:12px; padding:11px 13px; min-height:42px; cursor:pointer;
     transition:border-color .2s;
+    touch-action:manipulation; user-select:none; -webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
   }
-  .sync-pill:hover{ border-color:rgba(150,130,210,.5); }
+  @media(hover:hover){ .sync-pill:hover{ border-color:rgba(150,130,210,.5); } }
+  .sync-pill:active{ transform:scale(.96); }
   .sync-pill.synced{ border-color:rgba(52,211,153,.4); color:#a7f3d0; }
   .sync-pill.syncing{ border-color:rgba(95,227,242,.3); }
   .sync-pill .sync-dot{
@@ -768,7 +828,7 @@
     border-radius:0; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);
   }
 
-  @media(max-width:680px){
+  @media(max-width:980px){
     .brand .tag{ display:none; }
     header{ padding:8px 12px; }
     .stage-wrap,.keyboard-wrap{ margin-left:8px; margin-right:8px; }
@@ -785,24 +845,13 @@
 <body>
 <div class="app">
   <header>
+    <button id="menuBtn" class="menu-btn" title="Menu — morceaux, bibliothèque, apprentissage">☰</button>
     <div class="brand">
       <h1>PIANO&nbsp;FLOW</h1>
     </div>
     <div class="controls">
-      <a href="bibliotheque.html" class="file" id="libraryBtn" title="Parcourir tous les morceaux par style et par niveau">
-        <span>📚</span> Bibliothèque
-      </a>
-      <select id="songSelect" title="Mes morceaux importés"></select>
-      <a href="apprentissage.html" class="file" id="learnBtn" title="Ouvrir la page Apprentissage — exercices progressifs">
-        <span>🎓</span> Apprentissage
-      </a>
-      <label class="file" tabindex="0" title="Charger un fichier .mid" style="display:none">
-        <span>📁</span> Fichier MIDI
-        <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
-      </label>
-      <button id="sheetOpenBtn" class="file" title="Analyser une partition par photo ou lien PDF" style="display:none">
-        <span>🎼</span> Partition IA
-      </button>
+      <button id="playBtn" class="primary"><span id="playIc">▶</span> <span id="playLbl">Lecture</span></button>
+      <button id="restartBtn" title="Recommencer">⟲</button>
       <button id="modeBtn" class="toggle" title="Le morceau t'attend sur chaque note">
         <span>🎯</span> Entraînement
       </button>
@@ -814,22 +863,48 @@
       <button id="loopBtn" class="toggle" title="Activer / désactiver la boucle sélectionnée">
         <span>🔁</span> Boucle
       </button>
-      <div class="speed">
-        Vitesse
-        <input type="range" id="speed" min="0.3" max="1.4" step="0.05" value="1" />
-        <span class="val" id="speedVal">1.0×</span>
+      <div class="speed" id="speedChips">
+        <span class="speed-lbl">Vitesse</span>
+        <button data-speed="0.5">0.5×</button>
+        <button data-speed="0.75">0.75×</button>
+        <button data-speed="1" class="active">1×</button>
+        <button data-speed="1.25">1.25×</button>
       </div>
-      <div class="led-pill" id="progressPill" title="Ta progression par niveau">
-        <span class="led-dot"></span>
-        <span id="progressTxt">🎓 Progression</span>
-      </div>
-      <button id="editBtn" class="file" title="Modifier la partition — couper, supprimer, ajouter des notes" style="display:none">
-        <span>✏️</span> Modifier
-      </button>
-      <button id="restartBtn" title="Recommencer">⟲</button>
-      <button id="playBtn" class="primary"><span id="playIc">▶</span> <span id="playLbl">Lecture</span></button>
     </div>
   </header>
+
+  <!-- ===== MENU LATÉRAL ===== -->
+  <div class="side-menu-bg" id="sideMenuBg"></div>
+  <nav class="side-menu" id="sideMenu">
+    <div class="sm-head">
+      <h2>Menu</h2>
+      <button id="menuCloseBtn" class="sm-close" title="Fermer le menu">✕</button>
+    </div>
+    <div class="sm-section">Morceau</div>
+    <select id="songSelect" title="Mes morceaux importés"></select>
+    <div class="sm-section">Explorer</div>
+    <a href="bibliotheque.html" class="file" id="libraryBtn" title="Parcourir tous les morceaux par style et par niveau">
+      <span>📚</span> Bibliothèque
+    </a>
+    <a href="apprentissage.html" class="file" id="learnBtn" title="Ouvrir la page Apprentissage — exercices progressifs">
+      <span>🎓</span> Apprentissage
+    </a>
+    <div class="led-pill" id="progressPill" title="Ta progression par niveau">
+      <span class="led-dot"></span>
+      <span id="progressTxt">🎓 Progression</span>
+    </div>
+    <div class="sm-section">Outils</div>
+    <label class="file" tabindex="0" title="Charger un fichier .mid" style="display:none">
+      <span>📁</span> Fichier MIDI
+      <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
+    </label>
+    <button id="sheetOpenBtn" class="file" title="Analyser une partition par photo ou lien PDF" style="display:none">
+      <span>🎼</span> Partition IA
+    </button>
+    <button id="editBtn" class="file" title="Modifier la partition — couper, supprimer, ajouter des notes" style="display:none">
+      <span>✏️</span> Modifier
+    </button>
+  </nav>
 
   <!-- Voyants d'état, toujours visibles en haut à droite -->
   <div class="top-indicators">
@@ -1461,7 +1536,15 @@ function buildKeyboard(){
     kbEl.appendChild(el);
     const k={midi:m,x,w,black,el};
     keys.push(k); keyByMidi.set(m,k);
-    el.addEventListener('pointerdown',e=>{e.preventDefault();Audio.resume();onDown(m);});
+    el.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      try{ el.releasePointerCapture(e.pointerId); }catch(_){}
+      Audio.resume(); onDown(m);
+    });
+    el.addEventListener('pointerenter',e=>{
+      // glissando : le doigt/curseur enfoncé qui entre sur la touche la joue
+      if(e.buttons>0 || (e.pointerType==='touch' && e.pressure>0)){ Audio.resume(); onDown(m); }
+    });
     el.addEventListener('pointerup',  ()=>onUp(m));
     el.addEventListener('pointerleave',()=>onUp(m));
     el.addEventListener('pointercancel',()=>onUp(m));
@@ -2156,12 +2239,27 @@ document.getElementById('modeBtn').addEventListener('click',()=>{
   });
 });
 
-document.getElementById('speed').addEventListener('input',e=>{
-  speed=parseFloat(e.target.value);
-  document.getElementById('speedVal').textContent=speed.toFixed(1)+'×';
+document.querySelectorAll('#speedChips button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    speed=parseFloat(btn.dataset.speed);
+    document.querySelectorAll('#speedChips button').forEach(b=>b.classList.toggle('active',b===btn));
+  });
 });
 document.getElementById('restartBtn').addEventListener('click',()=>{reset();pauseFn();});
 document.getElementById('playBtn').addEventListener('click',()=>{Audio.resume();togglePlay();});
+
+/* ---- menu latéral ---- */
+(function(){
+  const menu=document.getElementById('sideMenu');
+  const bg=document.getElementById('sideMenuBg');
+  function openMenu(){ menu.classList.add('open'); bg.classList.add('open'); }
+  function closeMenu(){ menu.classList.remove('open'); bg.classList.remove('open'); }
+  document.getElementById('menuBtn').addEventListener('click',openMenu);
+  document.getElementById('menuCloseBtn').addEventListener('click',closeMenu);
+  bg.addEventListener('click',closeMenu);
+  // ferme le menu quand on choisit un morceau
+  document.getElementById('songSelect').addEventListener('change',closeMenu);
+})();
 document.getElementById('startBtn').addEventListener('click',()=>{
   document.getElementById('overlay').classList.add('hidden');
   Audio.resume();
