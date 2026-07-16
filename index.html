@@ -702,6 +702,26 @@
   .token-status.ok{ color:var(--correct); }
   .token-status.err{ color:var(--wrong); }
 
+  /* indicateur LED dans le header */
+  .led-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; color:var(--muted);
+    background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:11px; padding:7px 11px; cursor:pointer;
+    transition:border-color .2s, color .2s;
+  }
+  .led-pill:hover{ border-color:rgba(150,130,210,.5); }
+  .led-pill.on{ border-color:rgba(255,159,67,.5); color:#ffd8a8; }
+  .led-pill.err{ border-color:rgba(251,111,138,.4); color:var(--muted); }
+  .led-pill .led-dot{
+    width:8px; height:8px; border-radius:50%; background:#3d3555; flex-shrink:0;
+    transition:background .2s, box-shadow .2s;
+  }
+  .led-pill.on .led-dot{ background:var(--loop); box-shadow:0 0 8px var(--loop); }
+  .led-pill.err .led-dot{ background:var(--wrong); }
+  .led-pill.wait .led-dot{ background:var(--cyan); animation:spin .7s linear infinite;
+    border-radius:0; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); }
+
   /* indicateur sync dans le header */
   .sync-pill{
     display:inline-flex; align-items:center; gap:6px;
@@ -740,32 +760,7 @@
       <span class="tag">regarde tomber les notes · joue quand elles touchent le clavier</span>
     </div>
     <div class="controls">
-      <select id="songSelect" title="Choisir un morceau">
-        <optgroup label="Beethoven">
-          <option value="ode">Hymne à la joie</option>
-          <option value="fur_elise">Für Elise</option>
-        </optgroup>
-        <optgroup label="Bach">
-          <option value="bach_prelude">Prélude en Do majeur</option>
-        </optgroup>
-        <optgroup label="Chopin">
-          <option value="nocturne">Nocturne Op.9 No.2</option>
-        </optgroup>
-        <optgroup label="Satie">
-          <option value="gymnopedie">Gymnopédie No.1</option>
-          <option value="gnossienne">Gnossienne No.1</option>
-        </optgroup>
-        <optgroup label="Mozart">
-          <option value="rondo_turca">Rondo alla Turca</option>
-        </optgroup>
-        <optgroup label="Pachelbel">
-          <option value="canon">Canon en Ré</option>
-        </optgroup>
-        <optgroup label="Exercices">
-          <option value="clair">Au clair de la lune</option>
-          <option value="scale">Gamme de Do</option>
-        </optgroup>
-      </select>
+      <select id="songSelect" title="Choisir un morceau"></select>
       <label class="file" tabindex="0" title="Charger un fichier .mid">
         <span>📁</span> Fichier MIDI
         <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
@@ -788,6 +783,10 @@
         Vitesse
         <input type="range" id="speed" min="0.3" max="1.4" step="0.05" value="1" />
         <span class="val" id="speedVal">1.0×</span>
+      </div>
+      <div class="led-pill" id="ledPill" title="Ruban LED ESP32 — cliquer pour configurer">
+        <span class="led-dot"></span>
+        <span id="ledTxt">💡 LED</span>
       </div>
       <div class="sync-pill" id="syncPill" title="Synchronisation GitHub — cliquer pour configurer">
         <span class="sync-dot"></span>
@@ -996,6 +995,27 @@
 </div>
 
 <!-- ===== MODALE TOKEN GITHUB ===== -->
+<!-- ===== MODALE IP ESP32 ===== -->
+<div class="token-modal-bg hidden" id="ledModalBg">
+  <div class="token-modal">
+    <h3>💡 Ruban LED ESP32</h3>
+    <p>
+      Entre l'adresse <b>IP de ton ESP32</b> (affichée dans le Moniteur série d'Arduino).
+      Les LEDs s'allumeront en <b>cyan</b> pour la main droite et <b>doré</b> pour la main gauche,
+      et les deux extrémités s'allument pour la pédale.
+    </p>
+    <div class="token-row">
+      <input type="text" id="ledIpInput" placeholder="192.168.1.28" autocomplete="off" />
+    </div>
+    <div class="token-status" id="ledStatus"></div>
+    <div class="token-btns">
+      <button class="btn-skip" id="ledTest">Tester les LEDs</button>
+      <button class="btn-skip" id="ledOff">Déconnecter</button>
+      <button class="btn-save" id="ledSave">Connecter</button>
+    </div>
+  </div>
+</div>
+
 <div class="token-modal-bg hidden" id="tokenModalBg">
   <div class="token-modal">
     <h3>☁ Synchronisation multi-appareils</h3>
@@ -1059,7 +1079,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Hymne à la joie — main droite mélodie, main gauche accords simples
   // ----------------------------------------------------------------
-  ode: { name:'Hymne à la joie — Beethoven', ...merge(
+  ode: { name:'Hymne à la joie — Beethoven', level:'debutant', ...merge(
     seq([  // main droite : mélodie
       [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
       [60,QT],[60,QT],[62,QT],[64,QT],[64,QT*1.5],[62,QT*0.5],[62,HF],
@@ -1085,7 +1105,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Au clair de la lune
   // ----------------------------------------------------------------
-  clair: { name:'Au clair de la lune — traditionnel', ...merge(
+  clair: { name:'Au clair de la lune — traditionnel', level:'debutant', ...merge(
     seq([ // droite
       [60,QT],[60,QT],[60,QT],[62,QT],[64,HF],[62,HF],
       [60,QT],[64,QT],[62,QT],[62,QT],[60,WH],
@@ -1111,7 +1131,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Gamme de Do (exercice, pas de basse)
   // ----------------------------------------------------------------
-  scale: { name:'Gamme de Do — exercice', notes: seq([
+  scale: { name:'Gamme de Do — exercice', level:'debutant', notes: seq([
     [60,QT],[62,QT],[64,QT],[65,QT],[67,QT],[69,QT],[71,QT],[72,QT],
     [72,QT],[71,QT],[69,QT],[67,QT],[65,QT],[64,QT],[62,QT],[60,HF],
     [60,QT],[64,QT],[67,QT],[72,QT],[67,QT],[64,QT],[60,HF],
@@ -1121,7 +1141,7 @@ const SONGS = {
   // Für Elise — Beethoven
   // droite : thème, gauche : arpèges La m / Do M / Sol M
   // ----------------------------------------------------------------
-  fur_elise: { name:'Für Elise — Beethoven', ...merge(
+  fur_elise: { name:'Für Elise — Beethoven', level:'intermediaire', ...merge(
     seq([ // droite : thème principal
       [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
       [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[56,s8],[59,s8],  // Mi3=52 Sol#3=56
@@ -1160,7 +1180,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Prélude en Do — J.S. Bach (arpèges, basse sur 1er temps)
   // ----------------------------------------------------------------
-  bach_prelude: { name:'Prélude en Do — J.S. Bach', ...merge(
+  bach_prelude: { name:'Prélude en Do — J.S. Bach', level:'intermediaire', ...merge(
     seq([ // droite : voix supérieures de l'arpège (positions 3-8)
       ...[
         [64,67,72,76],[65,69,74,77],[62,67,74,77],[64,67,72,76],
@@ -1184,7 +1204,7 @@ const SONGS = {
   // Gymnopédie No.1 — Satie (3/4, lent)
   // droite : mélodie, gauche : accords à la basse
   // ----------------------------------------------------------------
-  gymnopedie: { name:'Gymnopédie No.1 — E. Satie', ...merge(
+  gymnopedie: { name:'Gymnopédie No.1 — E. Satie', level:'intermediaire', ...merge(
     seq([ // droite : mélodie
       [74,HF*0.95],[null,QT],[72,HF*0.95],[null,QT],[71,HF*0.95],[null,QT],[69,HF*0.95],[null,QT],
       [67,HF],[69,QT],[null,QT],[67,HF*0.95],[null,QT],
@@ -1225,7 +1245,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Gnossienne No.1 — Satie
   // ----------------------------------------------------------------
-  gnossienne: { name:'Gnossienne No.1 — E. Satie', ...merge(
+  gnossienne: { name:'Gnossienne No.1 — E. Satie', level:'intermediaire', ...merge(
     seq([ // droite
       [65,QT],[64,s8],[65,s8],[67,QT],[65,QT],[64,HF],
       [62,QT],[64,s8],[62,s8],[64,QT],[62,QT],[60,HF],
@@ -1262,7 +1282,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Rondo alla Turca — Mozart
   // ----------------------------------------------------------------
-  rondo_turca: { name:'Rondo alla Turca — Mozart', ...merge(
+  rondo_turca: { name:'Rondo alla Turca — Mozart', level:'intermediaire', ...merge(
     seq([ // droite : mélodie
       [69,s8],[71,s8],[72,s8],[74,s8],[76,s8],[77,s8],[79,s8],[81,s8],
       [81,QT],[68,s8],[69,s8],[null,QT],[69,s8],[71,s8],
@@ -1323,7 +1343,7 @@ const SONGS = {
   // Nocturne Op.9 No.2 — Chopin
   // droite : mélodie ornée, gauche : arpèges brisés Mib M
   // ----------------------------------------------------------------
-  nocturne: { name:'Nocturne Op.9 No.2 — Chopin', ...merge(
+  nocturne: { name:'Nocturne Op.9 No.2 — Chopin', level:'expert', ...merge(
     seq([ // droite : mélodie
       [70,QT*3],[72,s8],[70,QT*3],[67,s8],
       [75,WH],
@@ -1369,7 +1389,7 @@ const SONGS = {
   // ----------------------------------------------------------------
   // Canon en Ré — Pachelbel
   // ----------------------------------------------------------------
-  canon: { name:'Canon en Ré — Pachelbel', ...merge(
+  canon: { name:'Canon en Ré — Pachelbel', level:'expert', ...merge(
     seq([ // droite : mélodie canonique
       [66,HF],[64,HF],[62,HF],[73,HF],[71,HF],[69,HF],[71,HF],[73,HF],
       [74,HF],[73,HF],[71,HF],[69,HF],[67,HF],[66,HF],[67,HF],[69,HF],
@@ -1396,7 +1416,325 @@ const SONGS = {
     ped([[0,8],[8,16],[16,24],[24,32],[32,40],[40,48],[48,60]])
   )},
 
+  // ==================================================================
+  // NOUVEAUX MORCEAUX — DÉBUTANT
+  // ==================================================================
+
+  frere_jacques: { name:'Frère Jacques — traditionnel', level:'debutant', ...merge(
+    seq([
+      [60,QT],[62,QT],[64,QT],[60,QT], [60,QT],[62,QT],[64,QT],[60,QT],
+      [64,QT],[65,QT],[67,HF],          [64,QT],[65,QT],[67,HF],
+      [67,s8],[69,s8],[67,s8],[65,s8],[64,QT],[60,QT],
+      [67,s8],[69,s8],[67,s8],[65,s8],[64,QT],[60,QT],
+      [60,QT],[55,QT],[60,HF],          [60,QT],[55,QT],[60,HF],
+    ], 'R'),
+    seq([
+      [48,HF],[48,HF], [48,HF],[48,HF],
+      [53,HF],[53,HF],
+      [55,HF],[55,HF],
+      [48,HF],[48,HF],
+    ], 'L')
+  )},
+
+  twinkle: { name:'Ah vous dirai-je maman — traditionnel', level:'debutant', ...merge(
+    seq([
+      [60,QT],[60,QT],[67,QT],[67,QT],[69,QT],[69,QT],[67,HF],
+      [65,QT],[65,QT],[64,QT],[64,QT],[62,QT],[62,QT],[60,HF],
+      [67,QT],[67,QT],[65,QT],[65,QT],[64,QT],[64,QT],[62,HF],
+      [67,QT],[67,QT],[65,QT],[65,QT],[64,QT],[64,QT],[62,HF],
+      [60,QT],[60,QT],[67,QT],[67,QT],[69,QT],[69,QT],[67,HF],
+      [65,QT],[65,QT],[64,QT],[64,QT],[62,QT],[62,QT],[60,HF],
+    ], 'R'),
+    seq([
+      [48,HF],[55,HF], [48,HF],[55,HF],
+      [53,HF],[48,HF], [55,HF],[48,HF],
+      [48,HF],[55,HF], [48,HF],[55,HF],
+      [53,HF],[48,HF], [55,HF],[48,HF],
+      [48,HF],[55,HF], [48,HF],[55,HF],
+      [53,HF],[48,HF], [55,HF],[48,HF],
+    ], 'L')
+  )},
+
+  menuet_bach: { name:'Menuet en Sol — Bach (attrib.)', level:'debutant', ...merge(
+    seq([
+      [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
+      [67,HF],[62,QT],[64,QT],
+      [65,QT],[67,QT],[65,QT],[62,QT],[67,HF],
+      [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
+      [67,HF],[74,QT],[72,QT],
+      [71,QT],[69,QT],[67,QT],[65,QT],[62,HF],
+    ], 'R'),
+    seq([
+      [55,HF],[59,HF], [43,HF],[50,HF],
+      [55,HF],[59,HF],
+      [55,HF],[59,HF], [43,HF],[50,HF],
+      [55,HF],[59,HF],
+    ], 'L'),
+    ped([[0,4],[4,8],[8,12],[12,16]])
+  )},
+
+  petit_train: { name:'Le petit train — exercice', level:'debutant', ...merge(
+    seq([
+      [60,s8],[62,s8],[64,s8],[65,s8],[67,s8],[65,s8],[64,s8],[62,s8],
+      [60,s8],[62,s8],[64,s8],[65,s8],[67,s8],[69,s8],[71,s8],[72,s8],
+      [72,QT],[71,QT],[69,QT],[67,QT],
+      [65,QT],[64,QT],[62,QT],[60,HF],
+    ], 'R'),
+    seq([
+      [48,QT],[48,QT],[48,QT],[48,QT],
+      [48,QT],[48,QT],[48,QT],[48,QT],
+      [53,QT],[53,QT],[53,QT],[53,QT],
+      [48,QT],[48,QT],[48,QT],[48,WH],
+    ], 'L')
+  )},
+
+  valse_do: { name:'Petite valse en Do — exercice', level:'debutant', ...merge(
+    seq([
+      [64,QT],[67,QT],[72,QT], [69,QT],[67,QT],[64,QT],
+      [62,QT],[65,QT],[69,QT], [67,QT],[64,QT],[60,QT],
+      [64,QT],[67,QT],[72,QT], [69,QT],[67,QT],[64,QT],
+      [65,QT],[64,QT],[62,QT], [60,WH+QT],
+    ], 'R'),
+    seq([
+      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [53,QT],[57,QT],[60,QT], [53,QT],[57,QT],[60,QT],
+      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [55,QT],[57,QT],[59,QT], [48,WH+QT],
+    ], 'L'),
+    ped([[0,3],[3,6],[6,9],[9,12]])
+  )},
+
+  // ==================================================================
+  // NOUVEAUX MORCEAUX — INTERMÉDIAIRE
+  // ==================================================================
+
+  clair_de_lune: { name:'Clair de lune (extrait) — Debussy', level:'intermediaire', ...merge(
+    seq([
+      [68,HF],[null,QT],[70,HF*0.9],[null,QT],
+      [73,HF],[null,QT],[75,HF*0.9],[null,QT],
+      [76,QT],[75,QT],[73,QT],[70,QT],
+      [68,WH],
+      [66,HF],[null,QT],[68,HF*0.9],[null,QT],
+      [71,HF],[null,QT],[73,HF*0.9],[null,QT],
+      [75,QT],[73,QT],[71,QT],[68,QT],
+      [66,WH],
+    ], 'R'),
+    seq([
+      [44,WH],[51,WH],
+      [44,WH],[51,WH],
+      [42,WH],[49,WH],
+      [42,WH],[49,WH],
+    ], 'L'),
+    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,32]])
+  )},
+
+  valse_minute: { name:'Valse minute (extrait) — Chopin', level:'intermediaire', ...merge(
+    seq([
+      [75,s8],[74,s8],[75,s8],[79,QT],[77,QT],
+      [75,s8],[74,s8],[75,s8],[74,QT],[72,QT],
+      [70,s8],[72,s8],[74,s8],[75,QT],[74,QT],
+      [72,WH],
+      [75,s8],[74,s8],[75,s8],[79,QT],[77,QT],
+      [75,s8],[74,s8],[75,s8],[74,QT],[72,QT],
+      [70,s8],[72,s8],[74,s8],[75,QT],[74,QT],
+      [72,WH],
+    ], 'R'),
+    seq([
+      [63,QT],[67,QT],[70,QT], [63,QT],[67,QT],[70,QT],
+      [61,QT],[65,QT],[68,QT], [61,QT],[65,QT],[68,QT],
+      [63,QT],[67,QT],[70,QT], [63,QT],[67,QT],[70,QT],
+      [61,QT],[65,QT],[68,QT], [61,QT],[65,QT],[68,QT],
+    ], 'L')
+  )},
+
+  reverie_schumann: { name:'Rêverie — Schumann', level:'intermediaire', ...merge(
+    seq([
+      [69,QT],[74,QT*1.5],[72,s8],[71,QT],[69,QT],
+      [67,HF],[69,QT],[71,QT],
+      [72,WH],
+      [74,QT],[77,QT*1.5],[76,s8],[74,QT],[72,QT],
+      [71,HF],[72,QT],[74,QT],
+      [76,WH],
+    ], 'R'),
+    seq([
+      [45,HF],[52,HF], [45,HF],[52,HF],
+      [43,HF],[50,HF], [43,HF],[50,HF],
+      [50,HF],[57,HF], [50,HF],[57,HF],
+      [48,HF],[55,HF], [48,HF],[55,HF],
+    ], 'L'),
+    ped([[0,4],[4,8],[8,12],[12,16]])
+  )},
+
+  habanera: { name:'Habanera (Carmen) — Bizet', level:'intermediaire', ...merge(
+    seq([
+      [64,QT+s16],[63,s16],[62,QT+s16],[63,s16],[64,QT+s16],[63,s16],[62,QT+s16],[63,s16],
+      [64,QT],[59,QT],[60,QT],[62,QT],
+      [63,HF],[null,HF],
+      [65,QT+s16],[64,s16],[63,QT+s16],[64,s16],[65,QT+s16],[64,s16],[63,QT+s16],[64,s16],
+      [65,QT],[60,QT],[62,QT],[63,QT],
+      [64,WH],
+    ], 'R'),
+    seq([
+      [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
+      [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
+      [43,s8],[50,s8],[43,s8],[50,s8], [43,s8],[50,s8],[43,s8],[50,s8],
+      [46,s8],[53,s8],[46,s8],[53,s8], [46,s8],[53,s8],[46,s8],[53,s8],
+      [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
+    ], 'L')
+  )},
+
+  marche_turque: { name:'Marche turque (extrait 2) — Beethoven', level:'intermediaire', ...merge(
+    seq([
+      [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
+      [76,s8],[74,s8],[72,s8],[71,QT],[72,HF],
+      [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
+      [77,s8],[76,s8],[74,s8],[72,QT],[71,HF],
+    ], 'R'),
+    seq([
+      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [53,QT],[57,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [53,QT],[57,QT],[60,QT], [48,WH],
+    ], 'L')
+  )},
+
+  // ==================================================================
+  // NOUVEAUX MORCEAUX — EXPERT (associés à des films connus, domaine public)
+  // ==================================================================
+
+  walkyries: { name:'Chevauchée des Walkyries — Wagner (Apocalypse Now)', level:'expert', ...merge(
+    seq([
+      [69,QT],[72,QT],[76,QT],[81,HF],
+      [79,QT],[76,QT],[72,QT],[69,HF],
+      [69,QT],[72,QT],[76,QT],[81,HF],
+      [84,QT],[81,QT],[79,QT],[76,WH],
+      [74,QT],[77,QT],[81,QT],[86,HF],
+      [84,QT],[81,QT],[77,QT],[74,HF],
+    ], 'R'),
+    seq([
+      [45,QT],[52,QT],[57,QT],[45,HF],
+      [43,QT],[50,QT],[55,QT],[43,HF],
+      [45,QT],[52,QT],[57,QT],[45,HF],
+      [48,QT],[55,QT],[60,QT],[48,HF],
+      [50,QT],[57,QT],[62,QT],[50,HF],
+      [48,QT],[55,QT],[60,QT],[48,HF],
+    ], 'L'),
+    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24]])
+  )},
+
+  zarathoustra: { name:'Ainsi parlait Zarathoustra (ouverture) — R. Strauss (2001, l\u2019Odyssée de l\u2019espace)', level:'expert', ...merge(
+    seq([
+      [48,WH+HF],[55,QT],[60,QT],
+      [64,WH+HF],[null,HF],
+      [48,WH+HF],[55,QT],[60,QT],
+      [64,WH],[63,WH],[64,WH+WH],
+    ], 'R'),
+    seq([
+      [48,WH+WH],[48,WH+WH],
+      [48,WH+WH],
+      [48,WH],[48,WH],[48,WH+WH],
+    ], 'L'),
+    ped([[0,6],[6,12],[12,18],[18,26]])
+  )},
+
+  toccata_bach: { name:'Toccata en Ré mineur (ouverture) — J.S. Bach', level:'expert', ...merge(
+    seq([
+      [74,s16],[77,s16],[81,s16],[74,s16],[77,s16],[81,s16],[86,s16],[84,s16],
+      [81,s16],[79,s16],[77,s16],[76,QT],
+      [74,s16],[77,s16],[81,s16],[74,s16],[77,s16],[81,s16],[84,s16],[81,s16],
+      [79,s16],[77,s16],[74,s16],[72,QT],
+      [74,WH],
+    ], 'R'),
+    seq([
+      [null,HF],[null,HF],
+      [null,HF],[null,HF],
+      [50,WH],[45,WH],
+    ], 'L'),
+    ped([[8,16]])
+  )},
+
+  danse_macabre: { name:'Danse macabre — Saint-Saëns', level:'expert', ...merge(
+    seq([
+      [69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],
+      [69,QT],[72,QT],[74,QT],[76,QT],
+      [77,s8],[76,s8],[74,s8],[72,s8],[71,QT],[69,QT],
+      [69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],
+      [67,QT],[71,QT],[74,QT],[77,QT],
+    ], 'R'),
+    seq([
+      [45,QT],[45,QT],[45,QT],[45,QT],
+      [45,QT],[45,QT],[45,QT],[45,QT],
+      [45,QT],[45,QT],[45,QT],[45,QT],
+      [43,QT],[43,QT],[43,QT],[43,QT],
+    ], 'L')
+  )},
+
+  mont_chauve: { name:'Une nuit sur le mont Chauve (extrait) — Moussorgski', level:'expert', ...merge(
+    seq([
+      [60,s16],[63,s16],[67,s16],[70,s16],[72,QT],[70,s16],[67,s16],[63,s16],[60,QT],
+      [58,s16],[61,s16],[65,s16],[68,s16],[70,QT],[68,s16],[65,s16],[61,s16],[58,QT],
+      [56,QT],[60,QT],[63,QT],[67,HF],
+      [60,WH],
+    ], 'R'),
+    seq([
+      [36,HF],[43,HF], [34,HF],[41,HF],
+      [32,HF],[39,HF], [36,WH],
+    ], 'L'),
+    ped([[0,4],[4,8],[8,12],[12,16]])
+  )},
+
+  mont_roi: { name:'Dans l\u2019antre du roi de la montagne — Grieg', level:'expert', ...merge(
+    seq([
+      [57,QT],[60,QT],[62,QT],[64,QT],
+      [57,QT],[60,QT],[62,QT],[64,QT],
+      [57,s8],[60,s8],[62,s8],[64,s8],[65,s8],[64,s8],[62,s8],[60,s8],
+      [57,QT],[60,QT],[62,QT],[64,QT],
+      [59,QT],[62,QT],[64,QT],[66,QT],
+      [59,s8],[62,s8],[64,s8],[66,s8],[67,s8],[66,s8],[64,s8],[62,s8],
+      [69,WH],
+    ], 'R'),
+    seq([
+      [45,QT],[45,QT],[45,QT],[45,QT],
+      [45,QT],[45,QT],[45,QT],[45,QT],
+      [45,QT],[45,QT],[45,QT],[45,QT],
+      [45,QT],[45,QT],[45,QT],[45,QT],
+      [47,QT],[47,QT],[47,QT],[47,QT],
+      [47,QT],[47,QT],[47,QT],[47,QT],
+      [45,WH],
+    ], 'L')
+  )},
+
 };
+
+/* ---------- peuplement du sélecteur, groupé par niveau ---------- */
+const LEVEL_META = {
+  debutant:     { label: '🟢 Débutant',     order: 0 },
+  intermediaire:{ label: '🟡 Intermédiaire', order: 1 },
+  expert:       { label: '🔴 Expert',        order: 2 },
+};
+function populateSongSelect(){
+  const sel = document.getElementById('songSelect');
+  if(!sel) return;
+  sel.innerHTML = '';
+  const groups = {};
+  for(const [key, s] of Object.entries(SONGS)){
+    const lvl = s.level || 'intermediaire';
+    (groups[lvl] = groups[lvl] || []).push([key, s.name]);
+  }
+  const orderedLevels = Object.keys(LEVEL_META).sort((a,b)=>LEVEL_META[a].order-LEVEL_META[b].order);
+  for(const lvl of orderedLevels){
+    if(!groups[lvl]) continue;
+    const og = document.createElement('optgroup');
+    og.label = LEVEL_META[lvl].label;
+    for(const [key, name] of groups[lvl]){
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = name;
+      og.appendChild(opt);
+    }
+    sel.appendChild(og);
+  }
+}
+populateSongSelect();
 
 /* ---------- parseur MIDI ---------- */
 function parseMidi(buffer){
@@ -1810,11 +2148,13 @@ function onDown(midi){
       target.hit=true;
       Audio.play(midi,Audio.now(),target.dur,0.9);
       flashKey(midi,'lit-correct'); spawnColumn(midi,'var(--correct)'); spawnRipple(midi,'var(--correct)');
+      LedStrip.flash(midi,'hit',200);
       hits++; combo++;
       if(g.every(n=>n.hit))practiceCursor+=g.length;
     } else {
       Audio.play(midi,Audio.now(),0.3,0.6);
       flashKey(midi,'lit-wrong'); spawnColumn(midi,'var(--wrong)');
+      LedStrip.flash(midi,'wrong',300);
       const g2=currentGroup();
       if(g2&&t>=g2[0].start-0.25){wrongs++;combo=0;}
     }
@@ -2003,6 +2343,7 @@ function resolveColor(c){
 }
 
 function render(){
+  LedStrip.update();
   cx.clearRect(0,0,W,SH);
 
   // faisceaux Do
@@ -2086,6 +2427,7 @@ function render(){
   if(pedalEvents.length){
     const pedalEl = document.getElementById('pedalNow');
     const pedalActive = pedalEvents.some(p=> t>=p.start && t<p.end);
+    LedStrip.pedal(pedalActive);
 
     // Cherche si une transition est imminente (dans les 1.5s à venir)
     const AHEAD = 1.5; // secondes d'anticipation
@@ -3587,8 +3929,145 @@ const GistSync = (()=>{
 })();
 
 /* ============================================================
+   Ruban LED ESP32 (WebSocket, protocole texte)
+   ============================================================ */
+const LedStrip = (()=>{
+  const LS_IP = 'pianoflow_led_ip';
+  let ws = null, ip = null, connected = false, manualOff = false;
+  let lit = new Map();      // midi -> couleur envoyee
+  let pedalOn = false;      // etat pedale actuellement envoye
+
+  const pill = document.getElementById('ledPill');
+  const txt  = document.getElementById('ledTxt');
+  const modalBg = document.getElementById('ledModalBg');
+  const ipInput = document.getElementById('ledIpInput');
+  const statusEl= document.getElementById('ledStatus');
+
+  function setPill(state, label){
+    pill.className = 'led-pill' + (state ? ' '+state : '');
+    txt.textContent = label;
+  }
+  function setStatus(msg, type){
+    statusEl.className = 'token-status' + (type ? ' '+type : '');
+    statusEl.textContent = msg;
+  }
+  function send(msg){ if(ws && ws.readyState === 1) ws.send(msg); }
+
+  function connect(newIp){
+    ip = newIp; manualOff = false;
+    if(ws){ try{ ws.close(); }catch(e){} ws = null; }
+    setPill('wait', '\ud83d\udca1 Connexion\u2026');
+    try { ws = new WebSocket('ws://' + ip + ':81'); }
+    catch(e){ setPill('err', '\ud83d\udca1 Erreur'); setStatus('Adresse invalide', 'err'); return; }
+
+    ws.onopen = ()=>{
+      connected = true;
+      localStorage.setItem(LS_IP, ip);
+      setPill('on', '\ud83d\udca1 LED actif');
+      setStatus('\u2713 Connect\u00e9 \u00e0 ' + ip, 'ok');
+      lit.clear(); pedalOn = false; send('clear');
+    };
+    ws.onclose = ()=>{
+      connected = false;
+      setPill('', '\ud83d\udca1 LED');
+      if(ip && !manualOff) setTimeout(()=>{ if(!connected && ip && !manualOff) connect(ip); }, 3000);
+    };
+    ws.onerror = ()=>{
+      setPill('err', '\ud83d\udca1 Hors ligne');
+      setStatus('\u2717 Connexion impossible \u2014 v\u00e9rifie l\u2019IP et que l\u2019ESP32 est allum\u00e9', 'err');
+    };
+  }
+
+  function disconnect(){
+    manualOff = true;
+    if(ws){ try{ send('clear'); ws.close(); }catch(e){} ws = null; }
+    ip = null; connected = false; lit.clear(); pedalOn = false;
+    localStorage.removeItem(LS_IP);
+    setPill('', '\ud83d\udca1 LED');
+    setStatus('D\u00e9connect\u00e9', '');
+  }
+
+  // Envoie uniquement les differences (evite de saturer le WebSocket)
+  function sync(desired){
+    if(!connected) return;
+    for(const [midi, col] of Array.from(lit)){
+      if(desired.get(midi) !== col){ send('off:' + midi); lit.delete(midi); }
+    }
+    for(const [midi, col] of desired){
+      if(lit.get(midi) !== col){ send('on:' + midi + ':' + col); lit.set(midi, col); }
+    }
+  }
+
+  // Calcule les notes qui doivent etre allumees maintenant
+  function update(){
+    if(!connected) return;
+    const d = new Map();
+    if(mode === 'practice'){
+      const g = currentGroup();
+      if(g) for(const n of g) if(!n.hit) d.set(n.midi, n.hand === 'L' ? 'L' : 'R');
+    } else {
+      for(const n of notes){
+        if(n.start <= t && t < n.start + n.dur) d.set(n.midi, n.hand === 'L' ? 'L' : 'R');
+      }
+    }
+    sync(d);
+  }
+
+  // Flash ponctuel (note juste / fausse)
+  function flash(midi, col, ms){
+    if(!connected) return;
+    send('on:' + midi + ':' + col);
+    lit.set(midi, col);
+    setTimeout(()=>{ if(lit.get(midi) === col){ send('off:' + midi); lit.delete(midi); } }, ms || 250);
+  }
+
+  // Pedale : allume les deux extremites du ruban, envoie seulement sur changement d'etat
+  function pedal(active){
+    if(!connected) return;
+    if(active === pedalOn) return;
+    pedalOn = active;
+    send(active ? 'pedal:on' : 'pedal:off');
+  }
+
+  // ---- Modale ----
+  pill.addEventListener('click', ()=>{
+    ipInput.value = ip || localStorage.getItem(LS_IP) || '';
+    setStatus(connected ? '\u2713 Connect\u00e9 \u00e0 ' + ip : '', connected ? 'ok' : '');
+    modalBg.classList.remove('hidden');
+  });
+  modalBg.addEventListener('click', e=>{ if(e.target === modalBg) modalBg.classList.add('hidden'); });
+  document.getElementById('ledSave').addEventListener('click', ()=>{
+    const v = ipInput.value.trim();
+    if(!v){ setStatus('Entre une adresse IP', 'err'); return; }
+    connect(v);
+  });
+  document.getElementById('ledOff').addEventListener('click', disconnect);
+  document.getElementById('ledTest').addEventListener('click', ()=>{
+    if(!connected){ setStatus('Connecte-toi d\u2019abord', 'err'); return; }
+    setStatus('Test en cours\u2026', '');
+    let m = 21;
+    const iv = setInterval(()=>{
+      send('on:' + m + ':' + (m < 60 ? 'L' : 'R'));
+      if(m > 21) send('off:' + (m - 1));
+      m++;
+      if(m > 108){ clearInterval(iv); send('clear'); lit.clear(); setStatus('\u2713 Test termin\u00e9', 'ok'); }
+    }, 25);
+  });
+  ipInput.addEventListener('keydown', e=>{ if(e.key === 'Enter') document.getElementById('ledSave').click(); });
+
+  function init(){
+    const saved = localStorage.getItem(LS_IP);
+    if(saved) connect(saved);
+    else setPill('', '\ud83d\udca1 LED');
+  }
+
+  return { init, update, flash, pedal, get connected(){ return connected; } };
+})();
+
+/* ============================================================
    Démarrage
    ============================================================ */
+LedStrip.init();
 GistSync.init();
 GistSync.restoreAll();
 const startSong=SONGS.ode;
