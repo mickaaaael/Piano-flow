@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bibliothèque — Piano Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script src="songs-data.js"></script>
+<style>
+  :root{
+    --bg0:#0a0912; --bg1:#120e22;
+    --panel:rgba(28,22,48,.55); --panel-line:rgba(150,130,210,.18);
+    --text:#cec8df; --muted:#867ea3;
+    --cyan:#5fe3f2; --cyan-deep:#1fb6cf;
+    --violet:#c4a0ff; --violet-deep:#7c4ddf;
+    --correct:#34d399; --wrong:#fb6f8a; --gold:#ffd479;
+    --shadow:0 10px 40px -12px rgba(0,0,0,.7);
+    font-synthesis:none;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100vh;
+    background:radial-gradient(1200px 800px at 20% -10%, #1a1430 0%, var(--bg0) 55%), var(--bg0);
+    color:var(--text); font-family:'Inter',sans-serif;
+  }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; }
+
+  header{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:18px 24px; border-bottom:1px solid var(--panel-line);
+    position:sticky; top:0; z-index:10;
+    background:rgba(10,8,18,.75); backdrop-filter:blur(14px);
+  }
+  header h1{
+    font-family:'Space Grotesk',sans-serif; font-size:19px; font-weight:700; margin:0;
+    background:linear-gradient(92deg,var(--cyan),var(--violet));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    margin-right:auto;
+  }
+  .back-btn{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:13px; color:var(--text);
+    background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:11px; padding:8px 14px; transition:border-color .15s;
+  }
+  .back-btn:hover{ border-color:rgba(170,150,235,.45); }
+
+  main{ max-width:1040px; margin:0 auto; padding:28px 20px 80px; }
+  .intro{ font-size:13.5px; color:var(--muted); margin-bottom:24px; line-height:1.6; max-width:640px; }
+
+  /* ---- gros boutons de genre ---- */
+  .genres{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:32px; }
+  .genre-btn{
+    display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+    background:linear-gradient(160deg, rgba(255,255,255,.05), rgba(255,255,255,.015));
+    border:1.5px solid var(--panel-line); border-radius:18px; padding:22px 20px;
+    transition:border-color .18s, transform .12s, background .18s;
+    text-align:left;
+  }
+  .genre-btn:hover{ border-color:var(--genre-color,var(--cyan)); transform:translateY(-2px); }
+  .genre-btn.active{
+    border-color:var(--genre-color,var(--cyan));
+    background:linear-gradient(160deg, color-mix(in srgb, var(--genre-color,#5fe3f2) 14%, transparent), rgba(255,255,255,.02));
+  }
+  .genre-btn .icon{ font-size:30px; }
+  .genre-btn .label{ font-family:'Space Grotesk',sans-serif; font-size:16px; font-weight:700; color:var(--text); }
+  .genre-btn .count{ font-size:12px; color:var(--muted); }
+
+  /* ---- liste par difficulté ---- */
+  .song-panel{ display:none; }
+  .song-panel.visible{ display:block; animation:fadein .2s ease; }
+  @keyframes fadein{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+
+  .diff-group{ margin-bottom:26px; }
+  .diff-title{
+    font-family:'Space Grotesk',sans-serif; font-size:14px; font-weight:700; margin:0 0 10px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .song-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px; }
+
+  .song-card{
+    display:flex; align-items:center; gap:10px;
+    background:rgba(255,255,255,.04); border:1px solid var(--panel-line); border-radius:14px;
+    padding:12px 14px; transition:background .15s, border-color .15s;
+  }
+  .song-card:hover{ background:rgba(255,255,255,.08); border-color:rgba(170,150,235,.4); }
+  .song-card .open-btn{
+    flex:1; display:flex; flex-direction:column; align-items:flex-start; gap:3px;
+    background:none; border:none; color:var(--text); padding:0; text-align:left;
+  }
+  .song-card .name{ font-size:13px; font-weight:600; line-height:1.3; }
+  .song-card .stars{ font-size:11px; color:var(--gold); }
+  .song-card .preview-btn{
+    flex-shrink:0; width:38px; height:38px; border-radius:50%;
+    background:rgba(95,227,242,.12); border:1px solid rgba(95,227,242,.35);
+    color:var(--cyan); font-size:15px; display:flex; align-items:center; justify-content:center;
+    transition:background .15s, transform .1s;
+  }
+  .song-card .preview-btn:hover{ background:rgba(95,227,242,.25); }
+  .song-card .preview-btn:active{ transform:scale(.92); }
+  .song-card .preview-btn.playing{ background:var(--correct); border-color:var(--correct); color:#08130e; animation:pulse 1s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.6;} }
+
+  .empty-hint{ font-size:12.5px; color:var(--muted); }
+
+  .load-banner{
+    font-size:12px; color:var(--muted); margin-bottom:18px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .load-banner .spin{
+    width:13px; height:13px; border:2px solid rgba(95,227,242,.25); border-top-color:var(--cyan);
+    border-radius:50%; animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{transform:rotate(360deg);} }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="back-btn">← Retour au piano</a>
+  <h1>📚 Bibliothèque</h1>
+</header>
+
+<main>
+  <p class="intro">
+    Tous les morceaux de Piano Flow, rangés par style. Clique sur un genre, puis sur
+    <b>▶</b> pour écouter un aperçu sans quitter la page, ou sur le morceau pour l'ouvrir et jouer.
+  </p>
+
+  <div class="load-banner" id="loadBanner">
+    <div class="spin"></div><span>Chargement du son pour les aperçus…</span>
+  </div>
+
+  <div class="genres" id="genresGrid"></div>
+  <div id="panelsHost"></div>
+</main>
+
+<script>
+/* ============================================================
+   Définition des genres (les morceaux viennent de songs-data.js)
+   ============================================================ */
+const GENRES = [
+  { id:'classique',    label:'Classique',        icon:'🎻', color:'#5fe3f2' },
+  { id:'film',         label:'Musiques de film',  icon:'🎬', color:'#fb6f8a' },
+  { id:'traditionnel', label:'Traditionnel',      icon:'🎵', color:'#ffd479' },
+  { id:'exercice',     label:'Exercices',         icon:'🎓', color:'#c4a0ff' },
+];
+const DIFF_META = {
+  exercice:      { label:'🎓 Exercice',      order:0 },
+  debutant:      { label:'🟢 Débutant',      order:1 },
+  intermediaire: { label:'🟡 Intermédiaire', order:2 },
+  expert:        { label:'🔴 Expert',        order:3 },
+};
+
+const PROGRESS_KEY = 'pianoflow_progress';
+function loadProgress(){
+  try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function starsFor(acc){
+  if(acc >= 0.95) return '★★★';
+  if(acc >= 0.80) return '★★';
+  if(acc >= 0.60) return '★';
+  return '';
+}
+
+/* ============================================================
+   Construction de l'UI : boutons de genre + panneaux
+   ============================================================ */
+const genresGrid = document.getElementById('genresGrid');
+const panelsHost = document.getElementById('panelsHost');
+let activeGenre = null;
+
+function songsForGenre(gid){
+  return Object.entries(SONGS).filter(([key,s]) => s.genre === gid);
+}
+
+GENRES.forEach(g=>{
+  const count = songsForGenre(g.id).length;
+  const btn = document.createElement('button');
+  btn.className = 'genre-btn';
+  btn.style.setProperty('--genre-color', g.color);
+  btn.innerHTML = `
+    <span class="icon">${g.icon}</span>
+    <span class="label">${g.label}</span>
+    <span class="count">${count} morceau${count>1?'x':''}</span>`;
+  btn.addEventListener('click', ()=> selectGenre(g.id));
+  genresGrid.appendChild(btn);
+
+  const panel = document.createElement('div');
+  panel.className = 'song-panel';
+  panel.id = 'panel-' + g.id;
+  panelsHost.appendChild(panel);
+});
+
+function selectGenre(gid){
+  activeGenre = gid;
+  document.querySelectorAll('.genre-btn').forEach((b,i)=> b.classList.toggle('active', GENRES[i].id===gid));
+  document.querySelectorAll('.song-panel').forEach(p=> p.classList.toggle('visible', p.id==='panel-'+gid));
+  renderPanel(gid);
+}
+
+function renderPanel(gid){
+  const panel = document.getElementById('panel-'+gid);
+  const songs = songsForGenre(gid);
+  const progress = loadProgress();
+
+  if(!songs.length){
+    panel.innerHTML = '<p class="empty-hint">Aucun morceau dans cette catégorie pour le moment.</p>';
+    return;
+  }
+
+  // groupe par difficulté
+  const groups = {};
+  for(const [key, s] of songs){
+    const lvl = s.level || 'intermediaire';
+    (groups[lvl] = groups[lvl] || []).push([key, s]);
+  }
+  const orderedLevels = Object.keys(groups).sort((a,b)=> (DIFF_META[a]?.order??9) - (DIFF_META[b]?.order??9));
+
+  panel.innerHTML = '';
+  for(const lvl of orderedLevels){
+    const section = document.createElement('div');
+    section.className = 'diff-group';
+    const title = document.createElement('h3');
+    title.className = 'diff-title';
+    title.textContent = DIFF_META[lvl]?.label || lvl;
+    section.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'song-grid';
+    for(const [key, s] of groups[lvl]){
+      const best = progress[key]?.best;
+      const stars = best ? starsFor(best) : '';
+      const card = document.createElement('div');
+      card.className = 'song-card';
+      card.innerHTML = `
+        <button class="open-btn" data-key="${key}">
+          <span class="name">${s.name}</span>
+          ${stars ? `<span class="stars">${stars}</span>` : ''}
+        </button>
+        <button class="preview-btn" data-key="${key}" title="Écouter un aperçu">▶</button>`;
+      grid.appendChild(card);
+    }
+    section.appendChild(grid);
+    panel.appendChild(section);
+  }
+
+  panel.querySelectorAll('.open-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{ location.href = 'index.html?song=' + encodeURIComponent(b.dataset.key); });
+  });
+  panel.querySelectorAll('.preview-btn').forEach(b=>{
+    b.addEventListener('click', ()=> togglePreview(b.dataset.key, b));
+  });
+}
+
+/* ============================================================
+   Aperçu sonore — même moteur (Salamander) que l'appli principale
+   ============================================================ */
+const MIDI_TO_TONE_NAMES = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+function midiToTone(m){ return MIDI_TO_TONE_NAMES[m%12] + (Math.floor(m/12)-1); }
+
+const sampler = new Tone.Sampler({
+  urls:{
+    A0:'A0.mp3', C1:'C1.mp3', 'D#1':'Ds1.mp3', 'F#1':'Fs1.mp3',
+    A1:'A1.mp3', C2:'C2.mp3', 'D#2':'Ds2.mp3', 'F#2':'Fs2.mp3',
+    A2:'A2.mp3', C3:'C3.mp3', 'D#3':'Ds3.mp3', 'F#3':'Fs3.mp3',
+    A3:'A3.mp3', C4:'C4.mp3', 'D#4':'Ds4.mp3', 'F#4':'Fs4.mp3',
+    A4:'A4.mp3', C5:'C5.mp3', 'D#5':'Ds5.mp3', 'F#5':'Fs5.mp3',
+    A5:'A5.mp3', C6:'C6.mp3', 'D#6':'Ds6.mp3', 'F#6':'Fs6.mp3',
+    A6:'A6.mp3', C7:'C7.mp3', 'D#7':'Ds7.mp3', 'F#7':'Fs7.mp3',
+    A7:'A7.mp3',
+  },
+  release: 1.0,
+  baseUrl: 'https://tonejs.github.io/audio/salamander/',
+}).toDestination();
+
+Tone.loaded().then(()=>{ document.getElementById('loadBanner').style.display = 'none'; })
+  .catch(()=>{ document.getElementById('loadBanner').textContent = 'Aperçu indisponible (son non chargé)'; });
+
+const PREVIEW_DURATION = 7; // secondes jouées par aperçu
+let previewTimers = [];
+let previewBtn = null;
+
+function stopPreview(){
+  previewTimers.forEach(id => clearTimeout(id));
+  previewTimers = [];
+  sampler.releaseAll();
+  if(previewBtn){ previewBtn.classList.remove('playing'); previewBtn.textContent = '▶'; previewBtn = null; }
+}
+
+function togglePreview(key, btn){
+  const wasThisPlaying = previewBtn === btn;
+  stopPreview();
+  if(wasThisPlaying) return; // clic sur le même bouton = juste stop
+
+  Tone.start();
+  const song = SONGS[key];
+  const notes = (song.notes || []).filter(n => n.start < PREVIEW_DURATION);
+  if(!notes.length) return;
+
+  btn.classList.add('playing'); btn.textContent = '■';
+  previewBtn = btn;
+
+  const t0 = Tone.now() + 0.05;
+  for(const n of notes){
+    const dur = Math.min(n.dur, PREVIEW_DURATION - n.start);
+    sampler.triggerAttackRelease(midiToTone(n.midi), Math.max(0.05,dur), t0 + n.start, 0.75);
+  }
+  const stopId = setTimeout(stopPreview, PREVIEW_DURATION * 1000 + 400);
+  previewTimers.push(stopId);
+}
+
+// Sélectionne le premier genre par défaut
+selectGenre(GENRES[0].id);
+</script>
+</body>
+</html>

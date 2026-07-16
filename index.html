@@ -777,6 +777,7 @@
   }
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script src="songs-data.js"></script>
 </head>
 <body>
 <div class="app">
@@ -785,7 +786,10 @@
       <h1>PIANO&nbsp;FLOW</h1>
     </div>
     <div class="controls">
-      <select id="songSelect" title="Choisir un morceau"></select>
+      <a href="bibliotheque.html" class="file" id="libraryBtn" title="Parcourir tous les morceaux par style et par niveau">
+        <span>📚</span> Bibliothèque
+      </a>
+      <select id="songSelect" title="Mes morceaux importés"></select>
       <a href="apprentissage.html" class="file" id="learnBtn" title="Ouvrir la page Apprentissage — exercices progressifs">
         <span>🎓</span> Apprentissage
       </a>
@@ -1096,809 +1100,7 @@
    PIANO FLOW — moteur
    ============================================================ */
 
-const NOTE_NAMES = ['Do','Do#','Ré','Ré#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
-const BLACK_PC   = new Set([1,3,6,8,10]);
-const isBlack    = m => BLACK_PC.has(m % 12);
-const noteName   = m => NOTE_NAMES[m % 12] + (Math.floor(m/12) - 1);
-const freqOf     = m => 440 * Math.pow(2, (m - 69) / 12);
-const fmtTime    = s => { s=Math.max(0,s|0); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-
-/* ---------- morceaux intégrés ---------- */
-
-// seq(items, hand) : hand = 'R' | 'L' | null
-function seq(items, hand=null){
-  let t=0, notes=[];
-  for(const [m,d] of items){
-    if(m!==null) notes.push({midi:m, start:t, dur:d*0.92, hand});
-    t+=d;
-  }
-  return notes;
-}
-// mélange et trie deux mains + génère les événements pédale
-function merge(R, L, pedal=[]){
-  return { notes:[...R,...L].sort((a,b)=>a.start-b.start), pedal, hasHands:true };
-}
-// pédale : liste de {start,end} en secondes
-function ped(pairs){ return pairs.map(([s,e])=>({start:s,end:e})); }
-
-const QT=0.5, HF=1.0, WH=2.0;
-const s8=QT/2, s16=QT/4;
-
-const SONGS = {
-
-  // ----------------------------------------------------------------
-  // Hymne à la joie — main droite mélodie, main gauche accords simples
-  // ----------------------------------------------------------------
-  ode: { name:'Hymne à la joie — Beethoven', level:'debutant', ...merge(
-    seq([  // main droite : mélodie
-      [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
-      [60,QT],[60,QT],[62,QT],[64,QT],[64,QT*1.5],[62,QT*0.5],[62,HF],
-      [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
-      [60,QT],[60,QT],[62,QT],[64,QT],[62,QT*1.5],[60,QT*0.5],[60,HF],
-      [62,QT],[62,QT],[64,QT],[60,QT],[62,QT],[64,s8],[65,s8],[64,QT],[60,QT],
-      [62,QT],[64,s8],[65,s8],[64,QT],[62,QT],[60,QT],[62,QT],[67,HF],
-      [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
-      [60,QT],[60,QT],[62,QT],[64,QT],[62,QT*1.5],[60,QT*0.5],[60,WH],
-    ], 'R'),
-    seq([  // main gauche : basse + accords
-      [48,HF],[55,HF],  [48,HF],[50,HF],
-      [48,HF],[55,HF],  [48,HF],[50,HF],
-      [48,HF],[55,HF],  [48,HF],[50,HF],
-      [48,HF],[55,HF],  [43,HF],[50,HF],
-      [48,HF],[55,HF],  [48,HF],[50,HF],
-      [48,HF],[55,HF],  [48,HF],[50,HF],
-      [48,HF],[55,HF],  [48,HF],[50,HF],
-      [48,HF],[55,HF],  [48,WH],
-    ], 'L')
-  )},
-
-  // ----------------------------------------------------------------
-  // Au clair de la lune
-  // ----------------------------------------------------------------
-  clair: { name:'Au clair de la lune — traditionnel', level:'debutant', ...merge(
-    seq([ // droite
-      [60,QT],[60,QT],[60,QT],[62,QT],[64,HF],[62,HF],
-      [60,QT],[64,QT],[62,QT],[62,QT],[60,WH],
-      [60,QT],[60,QT],[60,QT],[62,QT],[64,HF],[62,HF],
-      [60,QT],[64,QT],[62,QT],[62,QT],[60,WH],
-      [62,QT],[62,QT],[62,QT],[62,QT],[69,HF],[69,HF],
-      [62,QT],[60,QT],[59,QT],[57,QT],[55,WH],
-      [60,QT],[60,QT],[60,QT],[62,QT],[64,HF],[62,HF],
-      [60,QT],[64,QT],[62,QT],[62,QT],[60,WH],
-    ], 'R'),
-    seq([ // gauche : basse simple
-      [48,HF],[43,HF], [48,HF],[43,HF],
-      [48,HF],[43,HF], [48,HF],[43,HF],
-      [48,HF],[43,HF], [48,HF],[43,HF],
-      [50,HF],[43,HF], [48,HF],[43,HF],
-      [48,HF],[43,HF], [48,HF],[43,HF],
-      [48,HF],[43,HF], [48,HF],[43,HF],
-      [48,HF],[43,HF], [48,HF],[43,HF],
-      [48,HF],[43,HF], [48,WH],
-    ], 'L')
-  )},
-
-  // ----------------------------------------------------------------
-  // Gamme de Do (exercice, pas de basse)
-  // ----------------------------------------------------------------
-  scale: { name:'Gamme de Do majeur', level:'exercice', notes: seq([
-    [60,QT],[62,QT],[64,QT],[65,QT],[67,QT],[69,QT],[71,QT],[72,QT],
-    [72,QT],[71,QT],[69,QT],[67,QT],[65,QT],[64,QT],[62,QT],[60,HF],
-    [60,QT],[64,QT],[67,QT],[72,QT],[67,QT],[64,QT],[60,HF],
-  ], 'R'), pedal:[], hasHands:false },
-
-  // ----------------------------------------------------------------
-  // Für Elise — Beethoven
-  // droite : thème, gauche : arpèges La m / Do M / Sol M
-  // ----------------------------------------------------------------
-  fur_elise: { name:'Für Elise — Beethoven', level:'intermediaire', ...merge(
-    seq([ // droite : thème principal
-      [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
-      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[56,s8],[59,s8],  // Mi3=52 Sol#3=56
-      [60,QT+s8],[52,s8],
-      [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
-      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[60,s8],[71,s8],[69,WH],
-      // pont B
-      [null,QT],[71,s8],[72,s8],[74,QT+s8],[76,s8],[55,s8],[76,s8],[74,QT+s8],[72,s8],
-      [53,s8],[74,s8],[72,QT+s8],[71,s8],[52,s8],[71,s8],[72,QT+s8],[null,QT],
-      // retour thème
-      [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
-      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[56,s8],[59,s8],
-      [60,QT+s8],[52,s8],
-      [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
-      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[60,s8],[71,s8],[69,WH],
-    ], 'R'),
-    seq([ // gauche : arpèges La m / Mi M / Do M
-      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],  // La m
-      [null,QT+s8],[52,s8],[56,s8],[59,s8],[52,s8],[56,s8],[59,s8],  // Mi M / Sol#
-      [null,QT+s8],[48,s8],[52,s8],[55,s8],
-      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
-      [null,QT+s8],[52,s8],[56,s8],[59,s8],[null,QT+s8],[52,s8],[55,s8],[59,s8],[57,WH],
-      // pont B — Sol M / La m
-      [null,QT],[55,s8],[59,s8],[62,s8],[55,s8],[59,s8],[55,s8],[59,s8],[62,s8],
-      [53,s8],[57,s8],[60,s8],[53,s8],[57,s8],[53,s8],[57,s8],[60,s8],[null,QT],
-      // retour
-      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
-      [null,QT+s8],[52,s8],[56,s8],[59,s8],[52,s8],[56,s8],[59,s8],
-      [null,QT+s8],[48,s8],[52,s8],[55,s8],
-      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
-      [null,QT+s8],[52,s8],[56,s8],[59,s8],[null,QT+s8],[52,s8],[55,s8],[59,s8],[57,WH],
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[20,24],[24,28],[28,36],[36,40],[40,44],[44,50]])
-  )},
-
-  // ----------------------------------------------------------------
-  // Prélude en Do — J.S. Bach (arpèges, basse sur 1er temps)
-  // ----------------------------------------------------------------
-  bach_prelude: { name:'Prélude en Do — J.S. Bach', level:'intermediaire', ...merge(
-    seq([ // droite : voix supérieures de l'arpège (positions 3-8)
-      ...[
-        [64,67,72,76],[65,69,74,77],[62,67,74,77],[64,67,72,76],
-        [65,69,72,77],[65,67,71,74],[64,67,72,76],[64,69,72,76],
-        [65,69,72,77],[62,67,71,77],[64,67,72,76],[65,69,72,76],
-        [65,68,72,75],[65,67,71,74],[64,67,73,76],[62,67,71,74],
-        [64,67,73,76],[60,65,69,72],[62,65,71,74],[62,67,71,74],
-        [64,67,73,76],[60,64,67,72],[65,69,72,77],[67,71,74,79],
-        [67,70,72,76],[65,69,72,77],[64,67,72,76],[62,67,71,74],
-        [60,64,67,72],
-      ].flatMap(chord => chord.flatMap(n => [[n,s8],[n,s8]]))
-    ], 'R'),
-    seq([ // gauche : basse (1 note par mesure, tenue)
-      ...[60,60,59,60, 60,59,60,57, 62,55,60,57, 56,55,55,55, 55,53,53,55, 55,57,62,67, 60,53,53,53, 60].map(n=>[n,WH])
-    ], 'L'),
-    ped([[0,2],[2,4],[4,6],[6,8],[8,10],[10,12],[12,14],[14,16],
-         [16,18],[18,20],[20,22],[22,24],[24,26],[26,28]])
-  )},
-
-  // ----------------------------------------------------------------
-  // Gymnopédie No.1 — Satie (3/4, lent)
-  // droite : mélodie, gauche : accords à la basse
-  // ----------------------------------------------------------------
-  gymnopedie: { name:'Gymnopédie No.1 — E. Satie', level:'intermediaire', ...merge(
-    seq([ // droite : mélodie
-      [74,HF*0.95],[null,QT],[72,HF*0.95],[null,QT],[71,HF*0.95],[null,QT],[69,HF*0.95],[null,QT],
-      [67,HF],[69,QT],[null,QT],[67,HF*0.95],[null,QT],
-      [66,HF],[null,QT+HF*0.95],[66,HF*0.95],[null,QT],
-      [69,HF*0.95],[null,QT],[74,HF*0.95],[null,QT],[72,HF*0.95],[null,QT],[71,HF*0.95],[null,QT],
-      [69,HF],[71,QT],[null,QT],[69,HF*0.95],[null,QT],
-      [67,HF],[null,QT+HF*0.95],[67,HF*0.95],[null,QT],
-      [64,HF*0.95],[null,QT],[64,HF*0.95],[null,QT],[66,HF*0.95],[null,QT],[68,HF*0.95],[null,QT],
-      [69,HF],[null,QT+HF*0.95],[69,HF*0.95],[null,QT],
-      [71,HF*0.95],[null,QT],[76,HF*0.95],[null,QT],[74,HF*0.95],[null,QT],[72,HF*0.95],[null,QT],
-      [71,HF],[72,QT],[null,QT],[71,HF*0.95],[null,QT],
-      [69,HF],[null,QT+HF*0.95],[69,HF*0.95],[null,QT],
-      [74,HF*0.95],[null,QT],[72,HF*0.95],[null,QT],[71,HF*0.95],[null,QT],[69,HF*0.95],[null,QT],
-      [67,HF],[69,QT],[null,QT],[67,HF*0.95],[null,QT],
-      [66,WH],[null,QT],
-    ], 'R'),
-    seq([ // gauche : accords Sol M / Re M (rythmique 3/4)
-      ...[
-        [43,55,59],[43,55,59],[43,55,59],[43,55,59],  // Sol2 Sol3 Si3
-        [43,55,62],[43,55,59],[43,55,59],[43,55,62],
-        [38,50,57],[38,50,57],[43,55,62],[38,50,57],
-        [43,55,59],[43,55,59],[43,55,59],[43,55,59],
-        [43,55,62],[43,55,59],[43,55,59],[43,55,62],
-        [38,50,57],[38,50,57],[38,55,59],[38,50,57],
-        [43,55,62],[43,55,62],[43,55,59],[43,55,62],
-        [43,55,62],[43,55,62],[43,55,59],[43,55,62],
-        [43,55,62],[43,55,59],[43,55,62],[43,55,59],
-        [38,50,57],[43,55,62],[43,55,59],[38,50,57],
-        [43,55,59],[43,55,59],[43,55,59],[43,55,59],
-        [43,55,62],[43,55,59],[43,55,59],[43,55,62],
-        [38,50,57],[38,50,57],[43,55,62],[38,50,57],
-        [38,50,57],[38,50,57],
-      ].flatMap(chord => chord.map(n=>[n,HF]))
-    ], 'L'),
-    ped([[0,6],[6,12],[12,18],[18,24],[24,30],[30,36],[36,42],[42,50],[50,58]])
-  )},
-
-  // ----------------------------------------------------------------
-  // Gnossienne No.1 — Satie
-  // ----------------------------------------------------------------
-  gnossienne: { name:'Gnossienne No.1 — E. Satie', level:'intermediaire', ...merge(
-    seq([ // droite
-      [65,QT],[64,s8],[65,s8],[67,QT],[65,QT],[64,HF],
-      [62,QT],[64,s8],[62,s8],[64,QT],[62,QT],[60,HF],
-      [58,QT],[60,s8],[58,s8],[60,QT],[58,QT],[57,HF],
-      [55,WH],[null,HF],
-      [65,QT],[64,s8],[65,s8],[67,QT],[65,QT],[64,HF],
-      [62,QT],[64,s8],[62,s8],[64,QT],[62,QT],[60,HF],
-      [58,QT],[60,s8],[58,s8],[60,QT],[58,QT],[55,HF],
-      [53,WH],[null,HF],
-      [72,QT],[70,s8],[72,s8],[74,QT],[72,QT],[70,HF],
-      [69,QT],[67,s8],[69,s8],[70,QT],[69,QT],[67,HF],
-      [65,QT],[67,s8],[65,s8],[67,QT],[65,QT],[63,HF],
-      [62,WH],[null,HF],
-      [65,QT],[64,s8],[65,s8],[67,QT],[65,QT],[64,HF],
-      [62,QT],[64,s8],[62,s8],[64,QT],[62,QT],[60,HF],
-      [58,QT],[60,s8],[58,s8],[60,QT],[58,QT],[57,HF],
-      [55,WH],[null,WH],
-    ], 'R'),
-    seq([ // gauche : basse + accord
-      ...[
-        [41,53,58],[41,53,58],[41,53,58],[41,53,58],
-        [41,53,58],[41,53,58],[41,53,58],[41,53,58],
-        [36,48,55],[36,48,55],[36,48,55],[36,48,55],
-        [41,53,58],[41,53,58],[41,53,58],[41,53,58],
-        [41,53,60],[41,53,60],[41,53,60],[41,53,60],
-        [38,50,57],[38,50,57],[38,50,57],[38,50,57],
-        [43,55,62],[43,55,62],[43,55,62],[43,55,62],
-        [36,48,55],[36,48,55],[36,48,55],[36,48,55],
-      ].flatMap(chord => chord.map(n=>[n,HF]))
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,36],[36,44]])
-  )},
-
-  // ----------------------------------------------------------------
-  // Rondo alla Turca — Mozart
-  // ----------------------------------------------------------------
-  rondo_turca: { name:'Rondo alla Turca — Mozart', level:'intermediaire', ...merge(
-    seq([ // droite : mélodie
-      [69,s8],[71,s8],[72,s8],[74,s8],[76,s8],[77,s8],[79,s8],[81,s8],
-      [81,QT],[68,s8],[69,s8],[null,QT],[69,s8],[71,s8],
-      [72,s8],[71,s8],[72,s8],[74,s8],[76,s8],[74,s8],[76,s8],[77,s8],
-      [76,QT],[null,QT],[76,s8],[77,s8],
-      [79,s8],[77,s8],[76,s8],[74,s8],[72,s8],[71,s8],[69,s8],[67,s8],
-      [65,s8],[64,s8],[62,s8],[60,s8],[59,s8],[57,s8],[55,s8],[53,s8],
-      [59,s8],[60,s8],[62,s8],[64,s8],[65,s8],[67,s8],[69,s8],[71,s8],
-      [72,QT],[null,QT],[72,s8],[74,s8],
-      [76,s8],[74,s8],[72,s8],[71,s8],[69,QT],[69,s8],[71,s8],
-      [72,s8],[71,s8],[69,s8],[68,s8],[69,QT],[69,s8],[71,s8],
-      [72,s8],[71,s8],[72,s8],[74,s8],[76,QT],[null,s8],[76,s8],
-      [77,s8],[76,s8],[74,s8],[73,s8],[74,QT],[null,QT],
-      [69,s8],[71,s8],[72,s8],[71,s8],[69,s8],[67,s8],[66,s8],[64,s8],
-      [62,s8],[64,s8],[66,s8],[67,s8],[69,s8],[71,s8],[72,s8],[74,s8],
-      [76,s8],[74,s8],[72,s8],[71,s8],[69,QT],[69,s8],[71,s8],
-      [72,QT+s8],[71,s8],[69,QT],[null,QT],
-      [69,s8],[71,s8],[72,s8],[74,s8],[76,s8],[77,s8],[79,s8],[81,s8],
-      [81,QT],[68,s8],[69,s8],[null,QT],[69,s8],[71,s8],
-      [72,s8],[71,s8],[72,s8],[74,s8],[76,s8],[74,s8],[76,s8],[77,s8],
-      [76,QT],[null,QT],[76,s8],[77,s8],
-      [79,s8],[77,s8],[76,s8],[74,s8],[72,s8],[71,s8],[69,s8],[67,s8],
-      [65,s8],[64,s8],[62,s8],[60,s8],[59,s8],[57,s8],[55,s8],[53,s8],
-      [52,s8],[53,s8],[55,s8],[57,s8],[59,s8],[60,s8],[62,s8],[64,s8],
-      [69,WH],
-    ], 'R'),
-    seq([ // gauche : basse + accords La m / La M
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[55,s8],[null,s8],[59,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[55,s8],[null,s8],[59,s8],[null,s8],
-      // section B (La M)
-      [57,s8],[null,s8],[61,s8],[null,s8],[64,s8],[null,s8],[61,s8],[null,s8],
-      [57,s8],[null,s8],[61,s8],[null,s8],[64,s8],[null,s8],[61,s8],[null,s8],
-      [57,s8],[null,s8],[61,s8],[null,s8],[64,s8],[null,s8],[61,s8],[null,s8],
-      [57,s8],[null,s8],[61,s8],[null,s8],[62,s8],[null,s8],[66,s8],[null,s8],
-      [57,s8],[null,s8],[61,s8],[null,s8],[64,s8],[null,s8],[61,s8],[null,s8],
-      [57,s8],[null,s8],[61,s8],[null,s8],[64,s8],[null,s8],[61,s8],[null,s8],
-      [57,s8],[null,s8],[61,s8],[null,s8],[64,s8],[null,s8],[61,s8],[null,s8],
-      [57,s8],[null,s8],[61,s8],[null,s8],[55,s8],[null,s8],[59,s8],[null,s8],
-      // retour A
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[55,s8],[null,s8],[59,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [57,s8],[null,s8],[60,s8],[null,s8],[64,s8],[null,s8],[60,s8],[null,s8],
-      [40,s8],[null,s8],[45,s8],[null,s8],[52,s8],[null,s8],[45,s8],[null,s8],
-      [45,WH],
-    ], 'L')
-  )},
-
-  // ----------------------------------------------------------------
-  // Nocturne Op.9 No.2 — Chopin
-  // droite : mélodie ornée, gauche : arpèges brisés Mib M
-  // ----------------------------------------------------------------
-  nocturne: { name:'Nocturne Op.9 No.2 — Chopin', level:'expert', ...merge(
-    seq([ // droite : mélodie
-      [70,QT*3],[72,s8],[70,QT*3],[67,s8],
-      [75,WH],
-      [74,QT*3],[72,s8],[70,QT],[68,s8],[67,s8],
-      [65,WH+QT],[null,QT],
-      [77,QT*3],[79,s8],[77,QT*3],[74,s8],
-      [82,WH],
-      [80,QT*3],[79,s8],[77,QT],[75,s8],[74,s8],
-      [72,WH+QT],[null,QT],
-      [70,QT*3],[72,s8],[73,s8],[72,s8],[70,QT*3],[67,s8],
-      [75,WH],
-      [74,QT*3],[72,s8],[70,QT],[68,s8],[67,s8],
-      [65,WH+QT],[null,QT],
-      [75,QT*3],[77,s8],[78,s8],[77,s8],[75,QT*3],[72,s8],
-      [80,WH],
-      [79,QT*3],[80,s8],[79,s8],[77,s8],[75,QT],[74,s8],[73,s8],
-      [72,WH],[null,WH],
-    ], 'R'),
-    seq([ // gauche : arpèges brisés (basse + accord + quinte) Mib M / Sib / Fa m
-      ...[
-        [[51,58,63],[51,58,63],[51,58,63]],  // Mib2 Si2 Mib3 (Mib M)
-        [[51,58,63],[51,58,63],[51,58,63]],
-        [[51,58,63],[51,58,63],[51,58,63]],
-        [[53,60,65],[53,60,65],[53,60,65]],  // Fa Sib Re (Sib M)
-        [[46,53,58],[46,53,58],[46,53,58]],  // Sib1 Fa2 Sib2
-        [[46,53,58],[46,53,58],[46,53,58]],
-        [[46,53,58],[46,53,58],[46,53,58]],
-        [[51,58,63],[51,58,63],[51,58,63]],
-        [[51,58,63],[51,58,63],[51,58,63]],
-        [[51,58,63],[51,58,63],[51,58,63]],
-        [[53,60,65],[53,60,65],[53,60,65]],
-        [[46,53,58],[46,53,58],[46,53,58]],
-        [[46,53,58],[46,53,58],[46,53,58]],
-        [[46,53,58],[46,53,58],[46,53,58]],
-        [[51,58,63],[51,58,63],[51,58,63]],
-        [[51,58,63],[51,58,63],[51,58,63]],
-      ].flatMap(grp => grp.flatMap(chord => chord.map(n=>[n,QT*3/chord.length])))
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,32],
-         [32,36],[36,40],[40,44],[44,48],[48,52],[52,56],[56,60],[60,68]])
-  )},
-
-  // ----------------------------------------------------------------
-  // Canon en Ré — Pachelbel
-  // ----------------------------------------------------------------
-  canon: { name:'Canon en Ré — Pachelbel', level:'expert', ...merge(
-    seq([ // droite : mélodie canonique
-      [66,HF],[64,HF],[62,HF],[73,HF],[71,HF],[69,HF],[71,HF],[73,HF],
-      [74,HF],[73,HF],[71,HF],[69,HF],[67,HF],[66,HF],[67,HF],[69,HF],
-      [66,QT],[67,QT],[69,QT],[67,QT],[66,QT],[64,QT],[62,QT],[64,QT],
-      [66,QT],[69,QT],[67,QT],[66,QT],[67,QT],[71,QT],[69,QT],[67,QT],
-      [66,QT],[64,QT],[62,QT],[64,QT],[66,QT],[62,QT],[64,QT],[66,QT],
-      [67,QT],[66,QT],[64,QT],[62,QT],[64,QT],[66,QT],[67,QT],[69,QT],
-      [74,s8],[73,s8],[74,s8],[69,s8],[66,s8],[69,s8],[62,s8],[66,s8],
-      [64,s8],[66,s8],[67,s8],[69,s8],[67,s8],[66,s8],[64,s8],[62,s8],
-      [73,s8],[74,s8],[73,s8],[71,s8],[69,s8],[71,s8],[73,s8],[69,s8],
-      [71,s8],[69,s8],[67,s8],[66,s8],[64,s8],[66,s8],[67,s8],[69,s8],
-      [66,s8],[67,s8],[69,s8],[66,s8],[67,s8],[69,s8],[71,s8],[67,s8],
-      [69,s8],[71,s8],[73,s8],[69,s8],[71,s8],[73,s8],[74,s8],[71,s8],
-      [73,s8],[74,s8],[76,s8],[73,s8],[74,s8],[73,s8],[71,s8],[69,s8],
-      [67,s8],[66,s8],[64,s8],[62,s8],[73,s8],[71,s8],[69,s8],[67,s8],
-      [66,HF],[67,QT],[69,QT],[74,WH],
-    ], 'R'),
-    seq([ // gauche : ostinato basse Ré-La-Si-Fa#-Sol-Ré-Sol-La
-      ...[
-        [50,62],[45,57],[47,59],[42,54],[43,55],[38,50],[43,55],[45,57],
-      ].flatMap(([b,m]) => Array(14).fill([[b,HF],[m,HF]])).flat().slice(0,120)
-      .concat([[50,WH]])
-    ], 'L'),
-    ped([[0,8],[8,16],[16,24],[24,32],[32,40],[40,48],[48,60]])
-  )},
-
-  // ==================================================================
-  // NOUVEAUX MORCEAUX — DÉBUTANT
-  // ==================================================================
-
-  frere_jacques: { name:'Frère Jacques — traditionnel', level:'debutant', ...merge(
-    seq([
-      [60,QT],[62,QT],[64,QT],[60,QT], [60,QT],[62,QT],[64,QT],[60,QT],
-      [64,QT],[65,QT],[67,HF],          [64,QT],[65,QT],[67,HF],
-      [67,s8],[69,s8],[67,s8],[65,s8],[64,QT],[60,QT],
-      [67,s8],[69,s8],[67,s8],[65,s8],[64,QT],[60,QT],
-      [60,QT],[55,QT],[60,HF],          [60,QT],[55,QT],[60,HF],
-    ], 'R'),
-    seq([
-      [48,HF],[48,HF], [48,HF],[48,HF],
-      [53,HF],[53,HF],
-      [55,HF],[55,HF],
-      [48,HF],[48,HF],
-    ], 'L')
-  )},
-
-  twinkle: { name:'Ah vous dirai-je maman — traditionnel', level:'debutant', ...merge(
-    seq([
-      [60,QT],[60,QT],[67,QT],[67,QT],[69,QT],[69,QT],[67,HF],
-      [65,QT],[65,QT],[64,QT],[64,QT],[62,QT],[62,QT],[60,HF],
-      [67,QT],[67,QT],[65,QT],[65,QT],[64,QT],[64,QT],[62,HF],
-      [67,QT],[67,QT],[65,QT],[65,QT],[64,QT],[64,QT],[62,HF],
-      [60,QT],[60,QT],[67,QT],[67,QT],[69,QT],[69,QT],[67,HF],
-      [65,QT],[65,QT],[64,QT],[64,QT],[62,QT],[62,QT],[60,HF],
-    ], 'R'),
-    seq([
-      [48,HF],[55,HF], [48,HF],[55,HF],
-      [53,HF],[48,HF], [55,HF],[48,HF],
-      [48,HF],[55,HF], [48,HF],[55,HF],
-      [53,HF],[48,HF], [55,HF],[48,HF],
-      [48,HF],[55,HF], [48,HF],[55,HF],
-      [53,HF],[48,HF], [55,HF],[48,HF],
-    ], 'L')
-  )},
-
-  menuet_bach: { name:'Menuet en Sol — Bach (attrib.)', level:'debutant', ...merge(
-    seq([
-      [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
-      [67,HF],[62,QT],[64,QT],
-      [65,QT],[67,QT],[65,QT],[62,QT],[67,HF],
-      [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
-      [67,HF],[74,QT],[72,QT],
-      [71,QT],[69,QT],[67,QT],[65,QT],[62,HF],
-    ], 'R'),
-    seq([
-      [55,HF],[59,HF], [43,HF],[50,HF],
-      [55,HF],[59,HF],
-      [55,HF],[59,HF], [43,HF],[50,HF],
-      [55,HF],[59,HF],
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16]])
-  )},
-
-  petit_train: { name:'Le petit train — exercice', level:'debutant', ...merge(
-    seq([
-      [60,s8],[62,s8],[64,s8],[65,s8],[67,s8],[65,s8],[64,s8],[62,s8],
-      [60,s8],[62,s8],[64,s8],[65,s8],[67,s8],[69,s8],[71,s8],[72,s8],
-      [72,QT],[71,QT],[69,QT],[67,QT],
-      [65,QT],[64,QT],[62,QT],[60,HF],
-    ], 'R'),
-    seq([
-      [48,QT],[48,QT],[48,QT],[48,QT],
-      [48,QT],[48,QT],[48,QT],[48,QT],
-      [53,QT],[53,QT],[53,QT],[53,QT],
-      [48,QT],[48,QT],[48,QT],[48,WH],
-    ], 'L')
-  )},
-
-  valse_do: { name:'Petite valse en Do — exercice', level:'debutant', ...merge(
-    seq([
-      [64,QT],[67,QT],[72,QT], [69,QT],[67,QT],[64,QT],
-      [62,QT],[65,QT],[69,QT], [67,QT],[64,QT],[60,QT],
-      [64,QT],[67,QT],[72,QT], [69,QT],[67,QT],[64,QT],
-      [65,QT],[64,QT],[62,QT], [60,WH+QT],
-    ], 'R'),
-    seq([
-      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
-      [53,QT],[57,QT],[60,QT], [53,QT],[57,QT],[60,QT],
-      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
-      [55,QT],[57,QT],[59,QT], [48,WH+QT],
-    ], 'L'),
-    ped([[0,3],[3,6],[6,9],[9,12]])
-  )},
-
-  // ==================================================================
-  // NOUVEAUX MORCEAUX — INTERMÉDIAIRE
-  // ==================================================================
-
-  clair_de_lune: { name:'Clair de lune (extrait) — Debussy', level:'intermediaire', ...merge(
-    seq([
-      [68,HF],[null,QT],[70,HF*0.9],[null,QT],
-      [73,HF],[null,QT],[75,HF*0.9],[null,QT],
-      [76,QT],[75,QT],[73,QT],[70,QT],
-      [68,WH],
-      [66,HF],[null,QT],[68,HF*0.9],[null,QT],
-      [71,HF],[null,QT],[73,HF*0.9],[null,QT],
-      [75,QT],[73,QT],[71,QT],[68,QT],
-      [66,WH],
-    ], 'R'),
-    seq([
-      [44,WH],[51,WH],
-      [44,WH],[51,WH],
-      [42,WH],[49,WH],
-      [42,WH],[49,WH],
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,32]])
-  )},
-
-  valse_minute: { name:'Valse minute (extrait) — Chopin', level:'intermediaire', ...merge(
-    seq([
-      [75,s8],[74,s8],[75,s8],[79,QT],[77,QT],
-      [75,s8],[74,s8],[75,s8],[74,QT],[72,QT],
-      [70,s8],[72,s8],[74,s8],[75,QT],[74,QT],
-      [72,WH],
-      [75,s8],[74,s8],[75,s8],[79,QT],[77,QT],
-      [75,s8],[74,s8],[75,s8],[74,QT],[72,QT],
-      [70,s8],[72,s8],[74,s8],[75,QT],[74,QT],
-      [72,WH],
-    ], 'R'),
-    seq([
-      [63,QT],[67,QT],[70,QT], [63,QT],[67,QT],[70,QT],
-      [61,QT],[65,QT],[68,QT], [61,QT],[65,QT],[68,QT],
-      [63,QT],[67,QT],[70,QT], [63,QT],[67,QT],[70,QT],
-      [61,QT],[65,QT],[68,QT], [61,QT],[65,QT],[68,QT],
-    ], 'L')
-  )},
-
-  reverie_schumann: { name:'Rêverie — Schumann', level:'intermediaire', ...merge(
-    seq([
-      [69,QT],[74,QT*1.5],[72,s8],[71,QT],[69,QT],
-      [67,HF],[69,QT],[71,QT],
-      [72,WH],
-      [74,QT],[77,QT*1.5],[76,s8],[74,QT],[72,QT],
-      [71,HF],[72,QT],[74,QT],
-      [76,WH],
-    ], 'R'),
-    seq([
-      [45,HF],[52,HF], [45,HF],[52,HF],
-      [43,HF],[50,HF], [43,HF],[50,HF],
-      [50,HF],[57,HF], [50,HF],[57,HF],
-      [48,HF],[55,HF], [48,HF],[55,HF],
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16]])
-  )},
-
-  habanera: { name:'Habanera (Carmen) — Bizet', level:'intermediaire', ...merge(
-    seq([
-      [64,QT+s16],[63,s16],[62,QT+s16],[63,s16],[64,QT+s16],[63,s16],[62,QT+s16],[63,s16],
-      [64,QT],[59,QT],[60,QT],[62,QT],
-      [63,HF],[null,HF],
-      [65,QT+s16],[64,s16],[63,QT+s16],[64,s16],[65,QT+s16],[64,s16],[63,QT+s16],[64,s16],
-      [65,QT],[60,QT],[62,QT],[63,QT],
-      [64,WH],
-    ], 'R'),
-    seq([
-      [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
-      [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
-      [43,s8],[50,s8],[43,s8],[50,s8], [43,s8],[50,s8],[43,s8],[50,s8],
-      [46,s8],[53,s8],[46,s8],[53,s8], [46,s8],[53,s8],[46,s8],[53,s8],
-      [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
-    ], 'L')
-  )},
-
-  marche_turque: { name:'Marche turque (extrait 2) — Beethoven', level:'intermediaire', ...merge(
-    seq([
-      [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
-      [76,s8],[74,s8],[72,s8],[71,QT],[72,HF],
-      [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
-      [77,s8],[76,s8],[74,s8],[72,QT],[71,HF],
-    ], 'R'),
-    seq([
-      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
-      [53,QT],[57,QT],[60,QT], [48,QT],[55,QT],[60,QT],
-      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
-      [53,QT],[57,QT],[60,QT], [48,WH],
-    ], 'L')
-  )},
-
-  // ==================================================================
-  // NOUVEAUX MORCEAUX — EXPERT (associés à des films connus, domaine public)
-  // ==================================================================
-
-  walkyries: { name:'Chevauchée des Walkyries — Wagner (Apocalypse Now)', level:'expert', ...merge(
-    seq([
-      [69,QT],[72,QT],[76,QT],[81,HF],
-      [79,QT],[76,QT],[72,QT],[69,HF],
-      [69,QT],[72,QT],[76,QT],[81,HF],
-      [84,QT],[81,QT],[79,QT],[76,WH],
-      [74,QT],[77,QT],[81,QT],[86,HF],
-      [84,QT],[81,QT],[77,QT],[74,HF],
-    ], 'R'),
-    seq([
-      [45,QT],[52,QT],[57,QT],[45,HF],
-      [43,QT],[50,QT],[55,QT],[43,HF],
-      [45,QT],[52,QT],[57,QT],[45,HF],
-      [48,QT],[55,QT],[60,QT],[48,HF],
-      [50,QT],[57,QT],[62,QT],[50,HF],
-      [48,QT],[55,QT],[60,QT],[48,HF],
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24]])
-  )},
-
-  zarathoustra: { name:'Ainsi parlait Zarathoustra (ouverture) — R. Strauss (2001, l\u2019Odyssée de l\u2019espace)', level:'expert', ...merge(
-    seq([
-      [48,WH+HF],[55,QT],[60,QT],
-      [64,WH+HF],[null,HF],
-      [48,WH+HF],[55,QT],[60,QT],
-      [64,WH],[63,WH],[64,WH+WH],
-    ], 'R'),
-    seq([
-      [48,WH+WH],[48,WH+WH],
-      [48,WH+WH],
-      [48,WH],[48,WH],[48,WH+WH],
-    ], 'L'),
-    ped([[0,6],[6,12],[12,18],[18,26]])
-  )},
-
-  toccata_bach: { name:'Toccata en Ré mineur (ouverture) — J.S. Bach', level:'expert', ...merge(
-    seq([
-      [74,s16],[77,s16],[81,s16],[74,s16],[77,s16],[81,s16],[86,s16],[84,s16],
-      [81,s16],[79,s16],[77,s16],[76,QT],
-      [74,s16],[77,s16],[81,s16],[74,s16],[77,s16],[81,s16],[84,s16],[81,s16],
-      [79,s16],[77,s16],[74,s16],[72,QT],
-      [74,WH],
-    ], 'R'),
-    seq([
-      [null,HF],[null,HF],
-      [null,HF],[null,HF],
-      [50,WH],[45,WH],
-    ], 'L'),
-    ped([[8,16]])
-  )},
-
-  danse_macabre: { name:'Danse macabre — Saint-Saëns', level:'expert', ...merge(
-    seq([
-      [69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],
-      [69,QT],[72,QT],[74,QT],[76,QT],
-      [77,s8],[76,s8],[74,s8],[72,s8],[71,QT],[69,QT],
-      [69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],[69,s8],[76,s8],
-      [67,QT],[71,QT],[74,QT],[77,QT],
-    ], 'R'),
-    seq([
-      [45,QT],[45,QT],[45,QT],[45,QT],
-      [45,QT],[45,QT],[45,QT],[45,QT],
-      [45,QT],[45,QT],[45,QT],[45,QT],
-      [43,QT],[43,QT],[43,QT],[43,QT],
-    ], 'L')
-  )},
-
-  mont_chauve: { name:'Une nuit sur le mont Chauve (extrait) — Moussorgski', level:'expert', ...merge(
-    seq([
-      [60,s16],[63,s16],[67,s16],[70,s16],[72,QT],[70,s16],[67,s16],[63,s16],[60,QT],
-      [58,s16],[61,s16],[65,s16],[68,s16],[70,QT],[68,s16],[65,s16],[61,s16],[58,QT],
-      [56,QT],[60,QT],[63,QT],[67,HF],
-      [60,WH],
-    ], 'R'),
-    seq([
-      [36,HF],[43,HF], [34,HF],[41,HF],
-      [32,HF],[39,HF], [36,WH],
-    ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16]])
-  )},
-
-  mont_roi: { name:'Dans l\u2019antre du roi de la montagne — Grieg', level:'expert', ...merge(
-    seq([
-      [57,QT],[60,QT],[62,QT],[64,QT],
-      [57,QT],[60,QT],[62,QT],[64,QT],
-      [57,s8],[60,s8],[62,s8],[64,s8],[65,s8],[64,s8],[62,s8],[60,s8],
-      [57,QT],[60,QT],[62,QT],[64,QT],
-      [59,QT],[62,QT],[64,QT],[66,QT],
-      [59,s8],[62,s8],[64,s8],[66,s8],[67,s8],[66,s8],[64,s8],[62,s8],
-      [69,WH],
-    ], 'R'),
-    seq([
-      [45,QT],[45,QT],[45,QT],[45,QT],
-      [45,QT],[45,QT],[45,QT],[45,QT],
-      [45,QT],[45,QT],[45,QT],[45,QT],
-      [45,QT],[45,QT],[45,QT],[45,QT],
-      [47,QT],[47,QT],[47,QT],[47,QT],
-      [47,QT],[47,QT],[47,QT],[47,QT],
-      [45,WH],
-    ], 'L')
-  )},
-
-  // ==================================================================
-  // EXERCICES PÉDAGOGIQUES — méthodes de référence des professeurs
-  // ==================================================================
-
-  scale_g: { name:'Gamme de Sol majeur', level:'exercice', notes: seq([
-    [67,QT],[69,QT],[71,QT],[72,QT],[74,QT],[76,QT],[78,QT],[79,QT],
-    [79,QT],[78,QT],[76,QT],[74,QT],[72,QT],[71,QT],[69,QT],[67,HF],
-  ], 'R'), pedal:[], hasHands:false },
-
-  scale_f: { name:'Gamme de Fa majeur', level:'exercice', notes: seq([
-    [65,QT],[67,QT],[69,QT],[70,QT],[72,QT],[74,QT],[76,QT],[77,QT],
-    [77,QT],[76,QT],[74,QT],[72,QT],[70,QT],[69,QT],[67,QT],[65,HF],
-  ], 'R'), pedal:[], hasHands:false },
-
-  arpege_do: { name:'Arpège de Do majeur', level:'exercice', ...merge(
-    seq([
-      [60,QT],[64,QT],[67,QT],[72,QT],[67,QT],[64,QT],[60,HF],
-      [60,QT],[64,QT],[67,QT],[72,QT],[76,QT],[72,QT],[67,QT],[64,QT],[60,WH],
-    ], 'R'),
-    seq([ [48,WH],[48,WH] ], 'L')
-  )},
-
-  hanon_1: { name:'Hanon No.1 — exercice de mécanisme', level:'exercice', ...merge(
-    seq([
-      [60,s8],[64,s8],[65,s8],[67,s8],[69,s8],[67,s8],[65,s8],[64,s8],
-      [62,s8],[65,s8],[67,s8],[69,s8],[71,s8],[69,s8],[67,s8],[65,s8],
-      [64,s8],[67,s8],[69,s8],[71,s8],[72,s8],[71,s8],[69,s8],[67,s8],
-      [65,s8],[69,s8],[71,s8],[72,s8],[74,s8],[72,s8],[71,s8],[69,s8],
-      [67,s8],[65,s8],[64,s8],[62,s8],[60,HF],
-    ], 'R'),
-    seq([
-      [36,s8],[40,s8],[41,s8],[43,s8],[45,s8],[43,s8],[41,s8],[40,s8],
-      [38,s8],[41,s8],[43,s8],[45,s8],[47,s8],[45,s8],[43,s8],[41,s8],
-      [40,s8],[43,s8],[45,s8],[47,s8],[48,s8],[47,s8],[45,s8],[43,s8],
-      [41,s8],[45,s8],[47,s8],[48,s8],[50,s8],[48,s8],[47,s8],[45,s8],
-      [43,s8],[41,s8],[40,s8],[38,s8],[36,HF],
-    ], 'L')
-  )},
-
-  hanon_2: { name:'Hanon No.2 — exercice de mécanisme', level:'exercice', ...merge(
-    seq([
-      [60,s8],[62,s8],[64,s8],[65,s8],[67,s8],[65,s8],[64,s8],[62,s8],
-      [60,s8],[64,s8],[65,s8],[67,s8],[69,s8],[67,s8],[65,s8],[64,s8],
-      [62,s8],[65,s8],[67,s8],[69,s8],[71,s8],[69,s8],[67,s8],[65,s8],
-      [64,s8],[67,s8],[69,s8],[71,s8],[72,s8],[71,s8],[69,s8],[67,s8],
-      [65,s8],[64,s8],[62,s8],[60,HF],
-    ], 'R'),
-    seq([
-      [36,s8],[38,s8],[40,s8],[41,s8],[43,s8],[41,s8],[40,s8],[38,s8],
-      [36,s8],[40,s8],[41,s8],[43,s8],[45,s8],[43,s8],[41,s8],[40,s8],
-      [38,s8],[41,s8],[43,s8],[45,s8],[47,s8],[45,s8],[43,s8],[41,s8],
-      [40,s8],[43,s8],[45,s8],[47,s8],[48,s8],[47,s8],[45,s8],[43,s8],
-      [41,s8],[40,s8],[38,s8],[36,HF],
-    ], 'L')
-  )},
-
-  czerny_style: { name:'Exercice style Czerny — doigts égaux', level:'exercice', ...merge(
-    seq([
-      [60,s16],[62,s16],[64,s16],[65,s16],[67,s16],[65,s16],[64,s16],[62,s16],
-      [60,s16],[62,s16],[64,s16],[65,s16],[67,s16],[69,s16],[71,s16],[72,s16],
-      [72,s16],[71,s16],[69,s16],[67,s16],[65,s16],[64,s16],[62,s16],[60,s16],
-      [64,s16],[65,s16],[67,s16],[69,s16],[67,s16],[65,s16],[64,s16],[62,s16],
-      [60,HF],
-    ], 'R'),
-    seq([
-      [48,QT],[55,QT],[48,QT],[55,QT],
-      [48,QT],[55,QT],[48,QT],[55,QT],
-      [48,HF],
-    ], 'L')
-  )},
-
-  burgmuller_arabesque: { name:'L\u2019Arabesque (extrait) — Burgmüller', level:'exercice', ...merge(
-    seq([
-      [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
-      [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[73,s16],[71,s16],
-      [69,QT],[null,QT],
-      [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
-      [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[72,s16],[71,s16],
-      [69,HF],
-    ], 'R'),
-    seq([
-      [45,QT],[52,QT],[57,QT],[52,QT],
-      [45,QT],[52,QT],[57,QT],[52,QT],
-      [45,HF],
-      [45,QT],[52,QT],[57,QT],[52,QT],
-      [45,QT],[52,QT],[57,QT],[52,QT],
-      [45,HF],
-    ], 'L')
-  )},
-
-  // ------------------------------------------------------------------
-  // EXERCICES DE PÉDALE — apprendre QUAND et COMMENT l'utiliser
-  // ------------------------------------------------------------------
-
-  pedal_direct: { name:'Pédale rythmique (directe)', level:'exercice',
-    desc:'<b>Pédale directe :</b> tu appuies EN MÊME TEMPS que tu joues l\u2019accord, tu relâches juste avant le suivant. C\u2019est la technique la plus simple, utilisée dans les marches et les morceaux rythmés où chaque accord doit être bien détaché.',
-    ...merge(
-    seq([
-      [60,QT],[64,QT],[67,QT],[72,QT],
-      [65,QT],[69,QT],[72,QT],[77,QT],
-      [67,QT],[71,QT],[74,QT],[79,QT],
-      [60,WH],
-    ], 'R'),
-    seq([
-      [48,WH],[53,WH],[55,WH],[48,WH],
-    ], 'L'),
-    ped([[0,2],[2,4],[4,6],[6,8]])
-  )},
-
-  pedal_legato: { name:'Pédale legato (syncopée)', level:'exercice',
-    desc:'<b>Pédale syncopée :</b> tu joues d\u2019abord la nouvelle note, PUIS tu relâches et ré-appuies juste après. C\u2019est la technique standard en musique classique — elle relie les notes entre elles sans les faire se mélanger. Regarde bien : la pédale change juste après chaque nouvelle basse, jamais pile dessus.',
-    ...merge(
-    seq([
-      [64,WH],[67,WH],[72,WH],[76,WH],
-    ], 'R'),
-    seq([
-      [48,WH],[53,WH],[50,WH],[48,WH],
-    ], 'L'),
-    ped([[0.08,2.08],[2.08,4.08],[4.08,6.08],[6.08,8]])
-  )},
-
-  pedal_harmonie: { name:'Pédale et changements d\u2019harmonie', level:'exercice',
-    desc:'<b>Règle d\u2019or :</b> change de pédale à CHAQUE changement d\u2019accord, jamais au milieu. Ici l\u2019harmonie change 4 fois — écoute comme un mélange de deux accords différents sonnerait faux si tu gardais la pédale trop longtemps.',
-    ...merge(
-    seq([
-      [60,QT],[64,QT],[67,QT],[71,QT],[74,QT],[77,QT],[64,QT],[67,QT],[72,QT],[65,QT],[69,QT],[72,QT],
-    ], 'R'),
-    seq([
-      [48,HF],[43,HF],[45,HF],[41,HF],
-    ], 'L'),
-    ped([[0,2],[2,4],[4,6],[6,8]])
-  )},
-
-  pedal_sustain: { name:'Pédale pour relier les notes (arpège)', level:'exercice',
-    desc:'<b>Pédale de liaison :</b> les doigts ne peuvent pas tenir un arpège très étalé — la pédale s\u2019en charge à leur place et fait sonner toutes les notes ensemble comme un seul accord. Garde-la enfoncée pendant tout l\u2019arpège, relâche seulement au changement d\u2019harmonie.',
-    ...merge(
-    seq([
-      [48,s8],[55,s8],[60,s8],[64,s8],[67,s8],[72,s8],[76,s8],[79,HF],
-      [43,s8],[50,s8],[57,s8],[62,s8],[65,s8],[69,s8],[74,s8],[77,HF],
-    ], 'R'),
-    seq([], 'L'),
-    ped([[0,4],[4,8]])
-  )},
-
-};
+// (SONGS, seq/merge/ped, NOTE_NAMES, etc. sont chargés depuis songs-data.js)
 
 /* ---------- peuplement du sélecteur, groupé par niveau ---------- */
 const LEVEL_META = {
@@ -1945,25 +1147,24 @@ function populateSongSelect(){
   if(!sel) return;
   const currentVal = sel.value;
   sel.innerHTML = '';
-  const groups = {};
-  for(const [key, s] of Object.entries(SONGS)){
-    const lvl = s.level || 'intermediaire';
-    (groups[lvl] = groups[lvl] || []).push([key, s.name]);
-  }
+  // Le catalogue intégré (morceaux avec un "genre") se parcourt désormais
+  // sur la page Bibliothèque — ce menu ne garde que les morceaux personnels
+  // (fichiers MIDI importés, partitions analysées par IA, synchronisés).
+  const custom = Object.entries(SONGS).filter(([key, s]) => !s.genre);
   const progress = loadProgress();
-  for(const lvl of LEVEL_ORDER){
-    if(!groups[lvl]) continue;
+  if(custom.length){
     const og = document.createElement('optgroup');
-    og.label = LEVEL_META[lvl].label;
-    for(const [key, name] of groups[lvl]){
+    og.label = '📁 Mes morceaux importés';
+    for(const [key, s] of custom){
       const opt = document.createElement('option');
       opt.value = key;
       const stars = progress[key] ? starsFor(progress[key].best) : '';
-      opt.textContent = name + (stars ? '  ' + stars : '');
+      opt.textContent = s.name + (stars ? '  ' + stars : '');
       og.appendChild(opt);
     }
     sel.appendChild(og);
   }
+  sel.style.display = custom.length ? '' : 'none';
   if(currentVal && [...sel.options].some(o=>o.value===currentVal)) sel.value = currentVal;
 }
 function starsFor(acc){
@@ -2207,6 +1408,7 @@ let notes=[]; let minMidi=60,maxMidi=72;
 let keys=[]; let keyByMidi=new Map();
 let playing=false, t=0, lastTs=null, speed=1;
 let mode='listen', lookAhead=3.2, songEnd=0;
+let currentSongKey=null; // identifie le morceau chargé, indépendant du menu (bibliothèque/import)
 let practiceHand='both'; // 'both' | 'R' | 'L'
 let practiceCursor=0;
 let pressed=new Set();
@@ -2424,8 +1626,7 @@ function step(ts){
       const total=hits+wrongs;
       if(total>=4){
         const acc=hits/total;
-        const key=document.getElementById('songSelect').value;
-        if(key && SONGS[key]) saveProgressEntry(key, acc);
+        if(currentSongKey && SONGS[currentSongKey]) saveProgressEntry(currentSongKey, acc);
       }
     }
   }
@@ -2900,6 +2101,7 @@ function showNameDialog(defaultName, onConfirm){
    ============================================================ */
 document.getElementById('songSelect').addEventListener('change',e=>{
   const s=SONGS[e.target.value];
+  currentSongKey=e.target.value;
   loadNotes(s, s.name);
   pauseFn();
 });
@@ -2914,6 +2116,7 @@ document.getElementById('midiFile').addEventListener('change',e=>{
         const sel=document.getElementById('songSelect');
         const key='midi_'+Date.now();
         SONGS[key]={name, notes:parsed.notes, pedal:parsed.pedal, hasHands:parsed.hasHands};
+        currentSongKey=key;
         GistSync.addSongToSelect(key, name);
         GistSync.saveSong(key, name, parsed);
         loadNotes(SONGS[key], name);
@@ -3195,6 +2398,7 @@ document.getElementById('startBtn').addEventListener('click',()=>{
     showNameDialog('Partition', name => {
       const key = 'sheet_' + Date.now();
       SONGS[key] = { name, notes: parsedSheetNotes, pedal: [], hasHands: false };
+      currentSongKey = key;
       GistSync.addSongToSelect(key, name);
       GistSync.saveSong(key, name, SONGS[key]);
       loadNotes(SONGS[key], name);
@@ -4393,15 +3597,16 @@ LedStrip.init();
 GistSync.init();
 GistSync.restoreAll();
 
-// Si on arrive depuis la page Apprentissage avec ?song=cle, on charge cet exercice
+// Si on arrive depuis la Bibliothèque ou l'Apprentissage avec ?song=cle, on charge ce morceau
 const urlSongKey = new URLSearchParams(location.search).get('song');
-const startSong = (urlSongKey && SONGS[urlSongKey]) ? SONGS[urlSongKey] : SONGS.ode;
+const startKey = (urlSongKey && SONGS[urlSongKey]) ? urlSongKey : 'ode';
+currentSongKey = startKey;
+const startSong = SONGS[startKey];
 loadNotes(startSong, startSong.name);
 if(urlSongKey && SONGS[urlSongKey]){
-  const sel = document.getElementById('songSelect');
-  if(sel) sel.value = urlSongKey;
-  // Ouvre directement en mode entraînement, pratique pour un exercice ciblé
-  if(mode !== 'practice'){
+  // Ouvre directement en mode entraînement, pratique pour un exercice ciblé depuis l'Apprentissage
+  const fromLearning = (SONGS[urlSongKey].level === 'exercice') || document.referrer.includes('apprentissage.html');
+  if(fromLearning && mode !== 'practice'){
     document.getElementById('modeBtn').click();
   }
 }
