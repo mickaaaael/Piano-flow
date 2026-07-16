@@ -793,11 +793,11 @@
       <a href="apprentissage.html" class="file" id="learnBtn" title="Ouvrir la page Apprentissage — exercices progressifs">
         <span>🎓</span> Apprentissage
       </a>
-      <label class="file" tabindex="0" title="Charger un fichier .mid">
+      <label class="file" tabindex="0" title="Charger un fichier .mid" style="display:none">
         <span>📁</span> Fichier MIDI
         <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
       </label>
-      <button id="sheetOpenBtn" class="file" title="Analyser une partition par photo ou lien PDF">
+      <button id="sheetOpenBtn" class="file" title="Analyser une partition par photo ou lien PDF" style="display:none">
         <span>🎼</span> Partition IA
       </button>
       <button id="modeBtn" class="toggle" title="Le morceau t'attend sur chaque note">
@@ -820,7 +820,7 @@
         <span class="led-dot"></span>
         <span id="progressTxt">🎓 Progression</span>
       </div>
-      <button id="editBtn" class="file" title="Modifier la partition — couper, supprimer, ajouter des notes">
+      <button id="editBtn" class="file" title="Modifier la partition — couper, supprimer, ajouter des notes" style="display:none">
         <span>✏️</span> Modifier
       </button>
       <button id="restartBtn" title="Recommencer">⟲</button>
@@ -3598,16 +3598,23 @@ GistSync.init();
 GistSync.restoreAll();
 
 // Si on arrive depuis la Bibliothèque ou l'Apprentissage avec ?song=cle, on charge ce morceau
-const urlSongKey = new URLSearchParams(location.search).get('song');
+const urlParams = new URLSearchParams(location.search);
+const urlSongKey = urlParams.get('song');
+const urlEdit = urlParams.get('edit') === '1';
 const startKey = (urlSongKey && SONGS[urlSongKey]) ? urlSongKey : 'ode';
 currentSongKey = startKey;
 const startSong = SONGS[startKey];
 loadNotes(startSong, startSong.name);
 if(urlSongKey && SONGS[urlSongKey]){
-  // Ouvre directement en mode entraînement, pratique pour un exercice ciblé depuis l'Apprentissage
-  const fromLearning = (SONGS[urlSongKey].level === 'exercice') || document.referrer.includes('apprentissage.html');
-  if(fromLearning && mode !== 'practice'){
-    document.getElementById('modeBtn').click();
+  if(urlEdit){
+    // Arrivée depuis "Modifier" sur la Bibliothèque : ouvre directement l'éditeur
+    setTimeout(()=> document.getElementById('editBtn').click(), 150);
+  } else {
+    // Ouvre directement en mode entraînement, pratique pour un exercice ciblé depuis l'Apprentissage
+    const fromLearning = (SONGS[urlSongKey].level === 'exercice') || document.referrer.includes('apprentissage.html');
+    if(fromLearning && mode !== 'practice'){
+      document.getElementById('modeBtn').click();
+    }
   }
 }
 initMIDI();

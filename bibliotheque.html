@@ -115,6 +115,118 @@
     border-radius:50%; animation:spin .7s linear infinite;
   }
   @keyframes spin{ to{transform:rotate(360deg);} }
+
+  /* ===== MODALE GESTION (ajouter/modifier) ===== */
+  .manage-modal-bg{
+    position:fixed; inset:0; z-index:80;
+    background:rgba(6,5,14,.92); backdrop-filter:blur(14px);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .manage-modal-bg.hidden{ display:none; }
+  .manage-modal{
+    background:linear-gradient(145deg,#1a1530,#110d20);
+    border:1px solid rgba(150,130,210,.35); border-radius:20px;
+    padding:26px 28px; width:100%; max-width:560px; max-height:88vh; overflow-y:auto;
+    box-shadow:0 32px 80px rgba(0,0,0,.7);
+  }
+  .manage-modal h3{
+    font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; margin:0 0 6px;
+    background:linear-gradient(92deg,var(--cyan),var(--violet));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .manage-modal p{ font-size:12.5px; color:var(--muted); line-height:1.55; margin:0 0 16px; }
+  .manage-modal p b{ color:var(--text); }
+
+  .manage-tabs{ display:flex; gap:4px; margin-bottom:18px; border-bottom:1px solid var(--panel-line); }
+  .manage-tab{
+    font-size:12.5px; color:var(--muted); background:none; border:none;
+    border-bottom:2px solid transparent; padding:8px 14px; transition:color .15s,border-color .15s;
+  }
+  .manage-tab.active{ color:var(--cyan); border-bottom-color:var(--cyan); }
+  .manage-panel{ display:none; }
+  .manage-panel.active{ display:block; }
+
+  .photo-drop{
+    border:2px dashed var(--panel-line); border-radius:14px;
+    padding:26px 16px; text-align:center; margin-bottom:14px;
+    cursor:pointer; transition:border-color .15s; color:var(--muted); font-size:12.5px;
+  }
+  .photo-drop:hover{ border-color:rgba(95,227,242,.5); color:var(--text); }
+  .photo-drop input{ display:none; }
+  .photo-drop .icon{ font-size:26px; display:block; margin-bottom:6px; }
+
+  .url-row{ display:flex; gap:8px; margin-bottom:12px; }
+  .url-row input[type=text]{
+    flex:1; font-size:13px; color:var(--text);
+    background:rgba(255,255,255,.06); border:1px solid rgba(150,130,210,.35);
+    border-radius:10px; padding:10px 14px; outline:none;
+  }
+  .url-row input[type=text]:focus{ border-color:var(--cyan); }
+
+  .midi-drop-row{
+    border:2px dashed var(--panel-line); border-radius:14px; padding:22px 16px; text-align:center;
+    cursor:pointer; color:var(--muted); font-size:12.5px; transition:border-color .15s; margin-bottom:6px;
+  }
+  .midi-drop-row:hover{ border-color:rgba(95,227,242,.5); color:var(--text); }
+  .midi-drop-row input{ display:none; }
+
+  .manage-select{
+    width:100%; font-size:13px; color:var(--text);
+    background:rgba(255,255,255,.06); border:1px solid rgba(150,130,210,.35);
+    border-radius:10px; padding:10px 14px; margin-bottom:12px;
+  }
+
+  .manage-preview{
+    width:100%; max-height:200px; object-fit:contain; border-radius:12px;
+    border:1px solid var(--panel-line); margin-bottom:12px; display:none; background:rgba(0,0,0,.3);
+  }
+  .manage-status{
+    font-size:12.5px; color:var(--muted); display:flex; align-items:center; gap:8px;
+    min-height:20px; margin-bottom:10px;
+  }
+  .manage-status .spin{
+    width:14px; height:14px; border:2px solid rgba(95,227,242,.25); border-top-color:var(--cyan);
+    border-radius:50%; animation:spin .7s linear infinite;
+  }
+  .manage-status.ok{ color:var(--correct); }
+  .manage-status.err{ color:var(--wrong); }
+  .manage-result{
+    background:rgba(95,227,242,.06); border:1px solid rgba(95,227,242,.2); border-radius:12px;
+    padding:12px 14px; font-size:12px; color:var(--text); line-height:1.6; white-space:pre-wrap;
+    display:none; margin-bottom:12px;
+  }
+  .manage-btns{ display:flex; gap:10px; justify-content:flex-end; margin-top:8px; }
+  .manage-btn-cancel{
+    font-size:13px; color:var(--muted); background:none; border:1px solid var(--panel-line);
+    border-radius:10px; padding:9px 16px;
+  }
+  .manage-btn-ok{
+    font-size:13px; font-weight:600; color:#0a0912;
+    background:linear-gradient(90deg,var(--cyan),var(--violet)); border:none;
+    border-radius:10px; padding:9px 20px; display:none;
+  }
+  .manage-btn-open{
+    font-size:13px; font-weight:600; color:#0a0912;
+    background:linear-gradient(90deg,var(--cyan),var(--violet)); border:none;
+    border-radius:10px; padding:9px 20px;
+  }
+
+  /* petite modale pour nommer un morceau */
+  .name-dialog-bg{
+    position:fixed; inset:0; z-index:95; background:rgba(6,5,14,.85); backdrop-filter:blur(8px);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .name-dialog{
+    background:linear-gradient(145deg,#1a1530,#110d20); border:1px solid rgba(150,130,210,.35);
+    border-radius:16px; padding:22px 24px; width:100%; max-width:380px;
+  }
+  .name-dialog h3{ font-size:15px; margin:0 0 4px; color:var(--text); }
+  .name-dialog p{ font-size:12px; color:var(--muted); margin:0 0 12px; }
+  .name-dialog input{
+    width:100%; font-size:13px; color:var(--text); background:rgba(255,255,255,.06);
+    border:1px solid rgba(150,130,210,.35); border-radius:10px; padding:9px 12px; outline:none; margin-bottom:14px;
+  }
+  .name-dialog .btns{ display:flex; gap:10px; justify-content:flex-end; }
 </style>
 </head>
 <body>
@@ -122,6 +234,7 @@
 <header>
   <a href="index.html" class="back-btn">← Retour au piano</a>
   <h1>📚 Bibliothèque</h1>
+  <button class="back-btn" id="manageBtn">➕ Ajouter / modifier des musiques</button>
 </header>
 
 <main>
@@ -138,6 +251,69 @@
   <div id="panelsHost"></div>
 </main>
 
+<!-- ===== MODALE AJOUTER / MODIFIER ===== -->
+<div class="manage-modal-bg hidden" id="manageModalBg">
+  <div class="manage-modal">
+    <h3>➕ Ajouter / modifier des musiques</h3>
+    <p>Importe tes propres morceaux ou modifie ceux de la bibliothèque.</p>
+
+    <div class="manage-tabs">
+      <button class="manage-tab active" data-tab="midi">📁 Fichier MIDI</button>
+      <button class="manage-tab" data-tab="ia">🎼 Partition IA</button>
+      <button class="manage-tab" data-tab="edit">✏️ Modifier</button>
+    </div>
+
+    <!-- Onglet MIDI -->
+    <div class="manage-panel active" id="tabMidi">
+      <div class="midi-drop-row" id="midiDrop">
+        📁 Clique pour choisir un fichier <b>.mid</b> à importer
+        <input type="file" id="midiFileInput" accept=".mid,.midi,audio/midi" />
+      </div>
+      <div class="manage-status" id="midiStatus"></div>
+    </div>
+
+    <!-- Onglet Partition IA -->
+    <div class="manage-panel" id="tabIa">
+      <div class="manage-tabs" style="margin-bottom:14px">
+        <button class="manage-tab active" data-subtab="photo">📷 Photo</button>
+        <button class="manage-tab" data-subtab="url">🔗 Lien / PDF</button>
+      </div>
+      <div class="manage-panel active" id="subtabPhoto">
+        <div class="photo-drop" id="photoDrop">
+          <span class="icon">📷</span>
+          Clique ou glisse une photo de ta partition ici
+          <input type="file" id="sheetPhotoInput" accept="image/*" capture="environment" />
+        </div>
+      </div>
+      <div class="manage-panel" id="subtabUrl">
+        <div class="url-row">
+          <input type="text" id="sheetUrlInput" placeholder="https://imslp.org/…/partition.pdf" />
+          <button class="manage-btn-open" id="sheetFetchBtn" style="padding:9px 16px">Analyser</button>
+        </div>
+      </div>
+      <img class="manage-preview" id="sheetPreviewImg" src="" alt="Partition" />
+      <div class="manage-status" id="sheetStatus"></div>
+      <div class="manage-result" id="sheetResult"></div>
+      <div class="manage-btns">
+        <button class="manage-btn-ok" id="sheetAddBtn">Ajouter à la bibliothèque</button>
+      </div>
+    </div>
+
+    <!-- Onglet Modifier -->
+    <div class="manage-panel" id="tabEdit">
+      <p style="margin-bottom:10px">Choisis un morceau à ouvrir dans l'éditeur (couper, supprimer ou ajouter des notes).</p>
+      <select class="manage-select" id="editSongSelect"></select>
+      <div class="manage-btns">
+        <button class="manage-btn-open" id="editOpenBtn">✏️ Ouvrir dans l'éditeur</button>
+      </div>
+    </div>
+
+    <div class="manage-btns">
+      <button class="manage-btn-cancel" id="manageCloseBtn">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    Définition des genres (les morceaux viennent de songs-data.js)
@@ -147,6 +323,7 @@ const GENRES = [
   { id:'film',         label:'Musiques de film',  icon:'🎬', color:'#fb6f8a' },
   { id:'traditionnel', label:'Traditionnel',      icon:'🎵', color:'#ffd479' },
   { id:'exercice',     label:'Exercices',         icon:'🎓', color:'#c4a0ff' },
+  { id:'mymusic',      label:'Mes morceaux',      icon:'📁', color:'#34d399' },
 ];
 const DIFF_META = {
   exercice:      { label:'🎓 Exercice',      order:0 },
@@ -174,7 +351,12 @@ const genresGrid = document.getElementById('genresGrid');
 const panelsHost = document.getElementById('panelsHost');
 let activeGenre = null;
 
+let customSongKeys = []; // morceaux importés (MIDI / Partition IA), sans "genre"
+
 function songsForGenre(gid){
+  if(gid === 'mymusic'){
+    return customSongKeys.filter(k => SONGS[k]).map(k => [k, SONGS[k]]);
+  }
   return Object.entries(SONGS).filter(([key,s]) => s.genre === gid);
 }
 
@@ -209,7 +391,9 @@ function renderPanel(gid){
   const progress = loadProgress();
 
   if(!songs.length){
-    panel.innerHTML = '<p class="empty-hint">Aucun morceau dans cette catégorie pour le moment.</p>';
+    panel.innerHTML = gid === 'mymusic'
+      ? '<p class="empty-hint">Tu n\u2019as encore rien importé. Clique sur « ➕ Ajouter / modifier des musiques » en haut pour charger un fichier MIDI ou analyser une partition en photo.</p>'
+      : '<p class="empty-hint">Aucun morceau dans cette catégorie pour le moment.</p>';
     return;
   }
 
@@ -314,7 +498,453 @@ function togglePreview(key, btn){
   previewTimers.push(stopId);
 }
 
-// Sélectionne le premier genre par défaut
+/* ============================================================
+   Stockage local des morceaux personnels — même format que
+   l'appli principale (clé "pianoflow_local_songs"), pour qu'ils
+   apparaissent automatiquement dans "Mes morceaux importés" côté
+   piano dès l'ouverture d'index.html.
+   ============================================================ */
+const LS_LOCAL_KEY = 'pianoflow_local_songs';
+function getLocalSongs(){
+  try { return JSON.parse(localStorage.getItem(LS_LOCAL_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function setLocalSongsStorage(songs){
+  try { localStorage.setItem(LS_LOCAL_KEY, JSON.stringify(songs)); } catch(e){}
+}
+function saveCustomSong(key, name, parsed){
+  const song = { name, notes: parsed.notes, pedal: parsed.pedal||[], hasHands: parsed.hasHands||false, savedAt: Date.now() };
+  const local = getLocalSongs();
+  local[key] = song;
+  setLocalSongsStorage(local);
+  SONGS[key] = song; // disponible immédiatement dans cette page
+}
+function loadCustomSongsIntoSongs(){
+  const local = getLocalSongs();
+  customSongKeys = [];
+  for(const [key, s] of Object.entries(local)){
+    SONGS[key] = s;
+    customSongKeys.push(key);
+  }
+  customSongKeys.sort((a,b) => (SONGS[a].savedAt||0) - (SONGS[b].savedAt||0));
+}
+function refreshCustomSongs(){
+  loadCustomSongsIntoSongs();
+  // met à jour le badge de comptage du bouton "Mes morceaux"
+  const idx = GENRES.findIndex(g=>g.id==='mymusic');
+  if(idx>=0){
+    const btn = genresGrid.children[idx];
+    const countEl = btn.querySelector('.count');
+    const n = customSongKeys.length;
+    countEl.textContent = n + ' morceau' + (n>1?'x':'');
+  }
+  if(activeGenre === 'mymusic') renderPanel('mymusic');
+  populateEditSelect();
+}
+
+/* ============================================================
+   Parseur de fichiers MIDI (.mid) — entièrement autonome
+   ============================================================ */
+function parseMidi(buffer){
+  const dv=new DataView(buffer); let p=0;
+  const u8=()=>dv.getUint8(p++);
+  const u16=()=>{const v=dv.getUint16(p);p+=2;return v;};
+  const u32=()=>{const v=dv.getUint32(p);p+=4;return v;};
+  const str=n=>{let s='';for(let i=0;i<n;i++)s+=String.fromCharCode(u8());return s;};
+  const vlq=()=>{let v=0,b;do{b=u8();v=(v<<7)|(b&0x7f);}while(b&0x80);return v;};
+  if(str(4)!=='MThd') throw new Error('Fichier non reconnu comme MIDI');
+  u32(); u16(); const ntrk=u16(); const division=u16();
+  if(division&0x8000) throw new Error('Format MIDI SMPTE non géré');
+  const tpq=division||480;
+  let tempos=[],raw=[],rawPedal=[];
+  for(let tr=0;tr<ntrk;tr++){
+    if(str(4)!=='MTrk') break;
+    const len=u32(); const end=p+len;
+    let tick=0,running=0; const pending={};
+    const closeNote=(chan,note,tk)=>{
+      const k=chan*128+note;
+      if(pending[k]!=null){raw.push({midi:note,chan,onTick:pending[k],offTick:tk});pending[k]=null;}
+    };
+    while(p<end){
+      tick+=vlq();
+      let status=dv.getUint8(p);
+      if(status&0x80){p++;running=status;}else status=running;
+      const type=status&0xf0,chan=status&0x0f;
+      if(status===0xff){
+        const meta=u8(),l=vlq();
+        if(meta===0x51){const us=(dv.getUint8(p)<<16)|(dv.getUint8(p+1)<<8)|dv.getUint8(p+2);p+=3;tempos.push({tick,us});}
+        else p+=l;
+      } else if(status===0xf0||status===0xf7){const l=vlq();p+=l;}
+      else if(type===0x90){const n=u8(),v=u8();if(v>0)pending[chan*128+n]=tick;else closeNote(chan,n,tick);}
+      else if(type===0x80){const n=u8();u8();closeNote(chan,n,tick);}
+      else if(type===0xb0){
+        const cc=u8(),val=u8();
+        if(cc===64) rawPedal.push({tick, on: val>=64, chan});
+      }
+      else if(type===0xa0||type===0xe0)p+=2;
+      else if(type===0xc0||type===0xd0)p+=1;
+      else p++;
+    }
+    p=end;
+  }
+  if(!tempos.length) tempos=[{tick:0,us:500000}];
+  tempos.sort((a,b)=>a.tick-b.tick);
+  const tickToSec=tk=>{
+    let sec=0,last=0,us=500000;
+    for(const tp of tempos){if(tp.tick>tk)break;sec+=((tp.tick-last)/tpq)*(us/1e6);last=tp.tick;us=tp.us;}
+    return sec+((tk-last)/tpq)*(us/1e6);
+  };
+  const usedChans = [...new Set(raw.filter(n=>n.chan!==9).map(n=>n.chan))].sort((a,b)=>a-b);
+  let leftChan = null;
+  if(usedChans.length >= 2){
+    const medianMidi = ch => {
+      const ms = raw.filter(n=>n.chan===ch).map(n=>n.midi).sort((a,b)=>a-b);
+      return ms[Math.floor(ms.length/2)];
+    };
+    leftChan = usedChans.reduce((a,b)=> medianMidi(a) <= medianMidi(b) ? a : b);
+  }
+  let notes=raw.filter(n=>n.chan!==9)
+    .map(n=>({
+      midi: n.midi,
+      start: tickToSec(n.onTick),
+      dur: Math.max(0.08, tickToSec(n.offTick)-tickToSec(n.onTick)),
+      hand: (leftChan!==null) ? (n.chan===leftChan ? 'L' : 'R') : null,
+    }))
+    .sort((a,b)=>a.start-b.start);
+  if(!notes.length) throw new Error('Aucune note jouable trouvée');
+  const t0=notes[0].start;
+  notes.forEach(n=>n.start-=t0);
+  const pedal=[];
+  let pedalOn=null;
+  for(const ev of rawPedal.sort((a,b)=>a.tick-b.tick)){
+    if(ev.on && pedalOn===null){ pedalOn=tickToSec(ev.tick)-t0; }
+    else if(!ev.on && pedalOn!==null){ pedal.push({start:pedalOn, end:tickToSec(ev.tick)-t0}); pedalOn=null; }
+  }
+  if(pedalOn!==null) pedal.push({start:pedalOn, end:notes[notes.length-1].start+2});
+  return {notes, pedal, hasHands: leftChan!==null};
+}
+
+/* ============================================================
+   Petite boîte de dialogue pour nommer un morceau importé
+   ============================================================ */
+function showNameDialog(defaultName, onConfirm){
+  const bg = document.createElement('div');
+  bg.className = 'name-dialog-bg';
+  bg.innerHTML = `
+    <div class="name-dialog">
+      <h3>Nommer ce morceau</h3>
+      <p>Ce nom apparaîtra dans « 📁 Mes morceaux ».</p>
+      <input type="text" id="ndInput" value="" autocomplete="off" spellcheck="false" />
+      <div class="btns">
+        <button class="manage-btn-cancel" id="ndCancel">Annuler</button>
+        <button class="manage-btn-ok" id="ndOk" style="display:inline-flex">Ajouter</button>
+      </div>
+    </div>`;
+  document.body.appendChild(bg);
+  const inp = bg.querySelector('#ndInput');
+  inp.value = defaultName;
+  setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  function close(){ document.body.removeChild(bg); }
+  bg.querySelector('#ndCancel').addEventListener('click', close);
+  bg.querySelector('#ndOk').addEventListener('click', () => {
+    const name = inp.value.trim() || defaultName;
+    close();
+    onConfirm(name);
+  });
+  inp.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){ bg.querySelector('#ndOk').click(); }
+    if(e.key === 'Escape'){ close(); }
+  });
+  bg.addEventListener('click', e => { if(e.target === bg) close(); });
+}
+
+/* ============================================================
+   Modale "Ajouter / modifier des musiques"
+   ============================================================ */
+const manageModalBg = document.getElementById('manageModalBg');
+document.getElementById('manageBtn').addEventListener('click', ()=>{
+  manageModalBg.classList.remove('hidden');
+  populateEditSelect();
+});
+document.getElementById('manageCloseBtn').addEventListener('click', ()=>{
+  manageModalBg.classList.add('hidden');
+});
+manageModalBg.addEventListener('click', e=>{ if(e.target===manageModalBg) manageModalBg.classList.add('hidden'); });
+
+// Onglets principaux (MIDI / IA / Modifier)
+document.querySelectorAll('.manage-tabs > .manage-tab[data-tab]').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.manage-tabs > .manage-tab[data-tab]').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('#tabMidi, #tabIa, #tabEdit').forEach(p=>p.classList.remove('active'));
+    document.getElementById('tab' + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1)).classList.add('active');
+  });
+});
+// Sous-onglets de Partition IA (Photo / URL)
+document.querySelectorAll('.manage-tab[data-subtab]').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.manage-tab[data-subtab]').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('#subtabPhoto, #subtabUrl').forEach(p=>p.classList.remove('active'));
+    document.getElementById('subtab' + tab.dataset.subtab.charAt(0).toUpperCase() + tab.dataset.subtab.slice(1)).classList.add('active');
+  });
+});
+
+/* ---- Onglet Fichier MIDI ---- */
+const midiDrop = document.getElementById('midiDrop');
+const midiFileInput = document.getElementById('midiFileInput');
+const midiStatus = document.getElementById('midiStatus');
+midiDrop.addEventListener('click', ()=> midiFileInput.click());
+midiFileInput.addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    try{
+      const parsed = parseMidi(rd.result);
+      const defaultName = f.name.replace(/\.midi?$/i,'').replace(/_/g,' ');
+      showNameDialog(defaultName, name=>{
+        const key = 'midi_' + Date.now();
+        saveCustomSong(key, name, parsed);
+        refreshCustomSongs();
+        midiStatus.className = 'manage-status ok';
+        midiStatus.textContent = '✓ « ' + name + ' » ajouté (' + parsed.notes.length + ' notes) — visible dans « 📁 Mes morceaux »';
+        midiFileInput.value = '';
+      });
+    }catch(err){
+      midiStatus.className = 'manage-status err';
+      midiStatus.textContent = '✗ Erreur : ' + err.message;
+    }
+  };
+  rd.readAsArrayBuffer(f);
+});
+
+/* ---- Onglet Partition IA ---- */
+let parsedSheetNotes = null;
+const sheetPreviewImg = document.getElementById('sheetPreviewImg');
+const sheetStatus = document.getElementById('sheetStatus');
+const sheetResult = document.getElementById('sheetResult');
+const sheetAddBtn = document.getElementById('sheetAddBtn');
+const photoDrop = document.getElementById('photoDrop');
+const sheetPhotoInput = document.getElementById('sheetPhotoInput');
+const sheetUrlInput = document.getElementById('sheetUrlInput');
+const sheetFetchBtn = document.getElementById('sheetFetchBtn');
+
+function resetSheetResult(){
+  parsedSheetNotes = null;
+  sheetStatus.textContent = ''; sheetStatus.className = 'manage-status';
+  sheetPreviewImg.classList.add('hidden'); sheetPreviewImg.style.display='none';
+  sheetResult.style.display = 'none';
+  sheetAddBtn.style.display = 'none';
+}
+function setSheetStatus(msg, type){
+  sheetStatus.className = 'manage-status' + (type ? ' '+type : '');
+  sheetStatus.innerHTML = (type==='loading'||!type ? '<div class="spin"></div>' : '') + '<span>'+msg+'</span>';
+}
+
+photoDrop.addEventListener('click', ()=> sheetPhotoInput.click());
+photoDrop.addEventListener('dragover', e=>{ e.preventDefault(); photoDrop.style.borderColor='var(--cyan)'; });
+photoDrop.addEventListener('dragleave', ()=>{ photoDrop.style.borderColor=''; });
+photoDrop.addEventListener('drop', e=>{
+  e.preventDefault(); photoDrop.style.borderColor='';
+  const f = e.dataTransfer.files[0];
+  if(f && f.type.startsWith('image/')) analyseImage(f);
+});
+sheetPhotoInput.addEventListener('change', e=>{ if(e.target.files[0]) analyseImage(e.target.files[0]); });
+sheetFetchBtn.addEventListener('click', ()=>{
+  const url = sheetUrlInput.value.trim();
+  if(!url){ sheetUrlInput.focus(); return; }
+  analyseUrl(url);
+});
+sheetUrlInput.addEventListener('keydown', e=>{ if(e.key==='Enter') sheetFetchBtn.click(); });
+
+sheetAddBtn.addEventListener('click', ()=>{
+  if(!parsedSheetNotes) return;
+  showNameDialog('Partition', name=>{
+    const key = 'sheet_' + Date.now();
+    saveCustomSong(key, name, { notes: parsedSheetNotes, pedal: [], hasHands: false });
+    refreshCustomSongs();
+    setSheetStatus('✓ « ' + name + ' » ajouté — visible dans « 📁 Mes morceaux »', 'ok');
+    sheetAddBtn.style.display = 'none';
+  });
+});
+
+const SHEET_PROMPT = `Tu es un expert en solfège et lecture de partitions de piano.
+Analyse cette partition et extrait TOUTES les notes visibles.
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans backticks.
+Format attendu :
+{
+  "titre": "nom du morceau si visible, sinon Partition",
+  "tempo": 90,
+  "notes": [
+    {"midi": 60, "start": 0.0, "dur": 0.5, "hand": "R"},
+    {"midi": 64, "start": 0.5, "dur": 0.5, "hand": "R"}
+  ]
+}
+
+Règles :
+- midi : numéro MIDI (Do4=60 Re4=62 Mi4=64 Fa4=65 Sol4=67 La4=69 Si4=71 Do5=72)
+- start : temps en secondes depuis le début (basé sur le tempo)
+- dur : durée en secondes (noire a 90bpm=0.67s croche=0.33s blanche=1.33s ronde=2.67s)
+- hand : R pour main droite (cle de sol), L pour main gauche (cle de fa)
+- Respecte les alterations (dieses, bemols) et les liaisons
+- Notes simultanees (accords) : meme start, dur differentes possibles
+- Inclus toutes les mesures visibles
+- Si illisible ou pas une partition piano : {"erreur": "description"}`;
+
+async function callClaude(content){
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content }]
+    })
+  });
+  if(!response.ok){
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Erreur API ' + response.status);
+  }
+  const data = await response.json();
+  const text = data.content?.find(c => c.type === 'text')?.text?.trim() || '';
+  if(!text) throw new Error('Reponse vide de Claude');
+  return text;
+}
+
+function processSheetResponse(raw, titreFallback){
+  const cleaned = raw.replace(/^[\s\S]*?(\{)/, '$1').replace(/\}[\s\S]*$/, '}');
+  let parsed;
+  try { parsed = JSON.parse(cleaned); }
+  catch { throw new Error('Réponse JSON invalide — réessaie avec une partition plus lisible'); }
+  if(parsed.erreur) throw new Error(parsed.erreur);
+  if(!parsed.notes || !parsed.notes.length) throw new Error('Aucune note trouvée');
+  const notes = parsed.notes
+    .filter(n => n.midi >= 21 && n.midi <= 108 && n.dur > 0)
+    .map(n => ({ midi: Math.round(n.midi), start: +n.start, dur: +n.dur, hand: n.hand || 'R' }))
+    .sort((a, b) => a.start - b.start);
+  if(!notes.length) throw new Error('Aucune note valide extraite');
+  const t0 = notes[0].start;
+  notes.forEach(n => n.start -= t0);
+  const titre = parsed.titre || titreFallback || 'Partition';
+  const nR = notes.filter(n => n.hand === 'R').length;
+  const nL = notes.filter(n => n.hand === 'L').length;
+  const dur = Math.max(...notes.map(n => n.start + n.dur));
+  parsedSheetNotes = notes;
+  sheetResult.textContent = [
+    '"' + titre + '" — ' + notes.length + ' notes extraites',
+    'Main droite : ' + nR + ' notes   Main gauche : ' + nL + ' notes',
+    'Durée estimée : ' + dur.toFixed(1) + 's   Tempo : ' + (parsed.tempo || '?') + ' bpm'
+  ].join('\n');
+  sheetResult.style.display = 'block';
+  setSheetStatus(notes.length + ' notes extraites avec succès !', 'ok');
+  sheetAddBtn.style.display = 'inline-flex';
+}
+function handleSheetError(err){
+  setSheetStatus('Erreur : ' + err.message, 'err');
+  sheetResult.textContent = [
+    'Erreur : ' + err.message, '',
+    'Conseils :',
+    '- Photo bien éclairée et nette, sans reflets',
+    '- Partition face à la caméra (pas de biais)',
+    '- Pour un PDF : vérifie que le lien est public et se termine par .pdf'
+  ].join('\n');
+  sheetResult.style.display = 'block';
+}
+async function analyseImage(file){
+  resetSheetResult();
+  const dataUrl = await new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); });
+  sheetPreviewImg.src = dataUrl; sheetPreviewImg.style.display = 'block';
+  setSheetStatus('Analyse en cours…', 'loading');
+  try{
+    const b64 = dataUrl.split(',')[1];
+    const mime = file.type || 'image/jpeg';
+    const data = await callClaude([
+      { type:'image', source:{ type:'base64', media_type:mime, data:b64 } },
+      { type:'text', text: SHEET_PROMPT }
+    ]);
+    processSheetResponse(data, file.name.replace(/\.[^.]+$/,''));
+  }catch(err){ handleSheetError(err); }
+}
+async function analyseUrl(url){
+  resetSheetResult();
+  setSheetStatus('Téléchargement et analyse en cours…', 'loading');
+  try{
+    let pdfB64 = null;
+    try{
+      const resp = await fetch(url, { mode:'cors' });
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const buf = await resp.arrayBuffer();
+      const u8 = new Uint8Array(buf);
+      let bin = ''; for(let i=0;i<u8.length;i++) bin += String.fromCharCode(u8[i]);
+      pdfB64 = btoa(bin);
+    }catch(e){ /* CORS bloqué : on passera l'URL directement à Claude */ }
+
+    let content;
+    if(pdfB64){
+      const isPdf = url.toLowerCase().includes('.pdf') || pdfB64.startsWith('JVBER');
+      content = [
+        { type:isPdf?'document':'image', source:{ type:'base64', media_type:isPdf?'application/pdf':'image/jpeg', data:pdfB64 } },
+        { type:'text', text: SHEET_PROMPT }
+      ];
+    } else {
+      const isPdf = url.toLowerCase().includes('.pdf');
+      content = [
+        { type:isPdf?'document':'image', source:{ type:'url', url } },
+        { type:'text', text: SHEET_PROMPT }
+      ];
+    }
+    const data = await callClaude(content);
+    const nom = url.split('/').pop().replace(/\.[^.]+$/,'') || 'Partition';
+    processSheetResponse(data, nom);
+  }catch(err){ handleSheetError(err); }
+}
+
+/* ---- Onglet Modifier ---- */
+function populateEditSelect(){
+  const sel = document.getElementById('editSongSelect');
+  sel.innerHTML = '';
+  const orderedGenres = GENRES.filter(g=>g.id!=='mymusic');
+  for(const g of orderedGenres){
+    const songs = songsForGenre(g.id);
+    if(!songs.length) continue;
+    const og = document.createElement('optgroup');
+    og.label = g.icon + ' ' + g.label;
+    for(const [key, s] of songs){
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = s.name;
+      og.appendChild(opt);
+    }
+    sel.appendChild(og);
+  }
+  const mine = songsForGenre('mymusic');
+  if(mine.length){
+    const og = document.createElement('optgroup');
+    og.label = '📁 Mes morceaux';
+    for(const [key, s] of mine){
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = s.name;
+      og.appendChild(opt);
+    }
+    sel.appendChild(og);
+  }
+}
+document.getElementById('editOpenBtn').addEventListener('click', ()=>{
+  const key = document.getElementById('editSongSelect').value;
+  if(!key) return;
+  location.href = 'index.html?song=' + encodeURIComponent(key) + '&edit=1';
+});
+
+/* ============================================================
+   Démarrage
+   ============================================================ */
+loadCustomSongsIntoSongs();
+GENRES.forEach((g,i)=>{
+  if(g.id==='mymusic'){
+    genresGrid.children[i].querySelector('.count').textContent =
+      customSongKeys.length + ' morceau' + (customSongKeys.length>1?'x':'');
+  }
+});
 selectGenre(GENRES[0].id);
 </script>
 </body>
