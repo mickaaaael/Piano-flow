@@ -37,7 +37,7 @@ const SONGS = {
   // Hymne à la joie — main droite mélodie, main gauche accords simples
   // ----------------------------------------------------------------
   ode: { name:'Hymne à la joie — Beethoven', level:'debutant', genre:'classique', ...merge(
-    seq([  // main droite : mélodie
+    seq([  // main droite : mélodie (2 strophes)
       [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
       [60,QT],[60,QT],[62,QT],[64,QT],[64,QT*1.5],[62,QT*0.5],[62,HF],
       [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
@@ -46,8 +46,17 @@ const SONGS = {
       [62,QT],[64,s8],[65,s8],[64,QT],[62,QT],[60,QT],[62,QT],[67,HF],
       [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
       [60,QT],[60,QT],[62,QT],[64,QT],[62,QT*1.5],[60,QT*0.5],[60,WH],
+      // ---- Strophe 2 : même thème, basse plus riche (voir main gauche) ----
+      [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
+      [60,QT],[60,QT],[62,QT],[64,QT],[64,QT*1.5],[62,QT*0.5],[62,HF],
+      [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
+      [60,QT],[60,QT],[62,QT],[64,QT],[62,QT*1.5],[60,QT*0.5],[60,HF],
+      [62,QT],[62,QT],[64,QT],[60,QT],[62,QT],[64,s8],[65,s8],[64,QT],[60,QT],
+      [62,QT],[64,s8],[65,s8],[64,QT],[62,QT],[60,QT],[62,QT],[67,HF],
+      [64,QT],[64,QT],[65,QT],[67,QT],[67,QT],[65,QT],[64,QT],[62,QT],
+      [60,QT],[60,QT],[62,QT],[64,QT],[62,QT*1.5],[60,QT*0.5],[60,WH+HF],
     ], 'R'),
-    seq([  // main gauche : basse + accords
+    seq([  // main gauche : basse + accords (strophe 2 = octaves plus amples)
       [48,HF],[55,HF],  [48,HF],[50,HF],
       [48,HF],[55,HF],  [48,HF],[50,HF],
       [48,HF],[55,HF],  [48,HF],[50,HF],
@@ -56,6 +65,14 @@ const SONGS = {
       [48,HF],[55,HF],  [48,HF],[50,HF],
       [48,HF],[55,HF],  [48,HF],[50,HF],
       [48,HF],[55,HF],  [48,WH],
+      [36,QT],[48,QT],[55,QT],[48,QT], [36,QT],[43,QT],[50,QT],[43,QT],
+      [36,QT],[48,QT],[55,QT],[48,QT], [31,QT],[43,QT],[50,QT],[43,QT],
+      [36,QT],[48,QT],[55,QT],[48,QT], [36,QT],[43,QT],[50,QT],[43,QT],
+      [34,QT],[41,QT],[50,QT],[41,QT], [36,HF],
+      [36,QT],[48,QT],[55,QT],[48,QT], [36,QT],[43,QT],[50,QT],[43,QT],
+      [36,QT],[48,QT],[55,QT],[48,QT], [31,QT],[43,QT],[50,QT],[43,QT],
+      [36,QT],[48,QT],[55,QT],[48,QT], [36,QT],[43,QT],[50,QT],[43,QT],
+      [36,WH+HF],
     ], 'L')
   )},
 
@@ -98,40 +115,64 @@ const SONGS = {
   // Für Elise — Beethoven
   // droite : thème, gauche : arpèges La m / Do M / Sol M
   // ----------------------------------------------------------------
-  fur_elise: { name:'Für Elise — Beethoven', level:'intermediaire', genre:'classique', ...merge(
-    seq([ // droite : thème principal
+  fur_elise: { name:'Für Elise (version longue) — Beethoven', level:'intermediaire', genre:'classique', ...merge(
+    seq([ // droite : thème principal (A)
       [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
-      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[56,s8],[59,s8],  // Mi3=52 Sol#3=56
+      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[56,s8],[59,s8],
       [60,QT+s8],[52,s8],
       [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
       [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[60,s8],[71,s8],[69,WH],
       // pont B
       [null,QT],[71,s8],[72,s8],[74,QT+s8],[76,s8],[55,s8],[76,s8],[74,QT+s8],[72,s8],
       [53,s8],[74,s8],[72,QT+s8],[71,s8],[52,s8],[71,s8],[72,QT+s8],[null,QT],
-      // retour thème
+      // retour thème A
       [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
       [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[56,s8],[59,s8],
       [60,QT+s8],[52,s8],
       [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
       [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[60,s8],[71,s8],[69,WH],
+      // ---- Section C : passage plus dramatique en Fa majeur (célèbre montée en arpèges) ----
+      [65,s16],[69,s16],[72,s16],[77,s16],[65,s16],[69,s16],[72,s16],[77,s16],
+      [65,s16],[70,s16],[74,s16],[77,s16],[65,s16],[70,s16],[74,s16],[77,s16],
+      [65,s16],[69,s16],[72,s16],[77,s16],[65,s16],[69,s16],[72,s16],[77,s16],
+      [67,s8],[68,s8],[69,QT],[null,QT],
+      [77,s16],[76,s16],[74,s16],[72,s16],[77,s16],[76,s16],[74,s16],[72,s16],
+      [77,s16],[76,s16],[74,s16],[72,s16],[77,s16],[76,s16],[74,s16],[72,s16],
+      [70,s8],[69,s8],[67,QT],[65,QT],
+      // ---- Retour final du thème A + coda ----
+      [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
+      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[56,s8],[59,s8],
+      [60,QT+s8],[52,s8],
+      [76,s8],[75,s8],[76,s8],[75,s8],[76,s8],[71,s8],[74,s8],[72,s8],
+      [69,QT+s8],[60,s8],[64,s8],[69,s8],[71,QT+s8],[52,s8],[60,s8],[69,s8],[57,s8],[69,s8],[64,WH],
     ], 'R'),
     seq([ // gauche : arpèges La m / Mi M / Do M
-      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],  // La m
-      [null,QT+s8],[52,s8],[56,s8],[59,s8],[52,s8],[56,s8],[59,s8],  // Mi M / Sol#
-      [null,QT+s8],[48,s8],[52,s8],[55,s8],
-      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
-      [null,QT+s8],[52,s8],[56,s8],[59,s8],[null,QT+s8],[52,s8],[55,s8],[59,s8],[57,WH],
-      // pont B — Sol M / La m
-      [null,QT],[55,s8],[59,s8],[62,s8],[55,s8],[59,s8],[55,s8],[59,s8],[62,s8],
-      [53,s8],[57,s8],[60,s8],[53,s8],[57,s8],[53,s8],[57,s8],[60,s8],[null,QT],
-      // retour
       [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
       [null,QT+s8],[52,s8],[56,s8],[59,s8],[52,s8],[56,s8],[59,s8],
       [null,QT+s8],[48,s8],[52,s8],[55,s8],
       [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
       [null,QT+s8],[52,s8],[56,s8],[59,s8],[null,QT+s8],[52,s8],[55,s8],[59,s8],[57,WH],
+      [null,QT],[55,s8],[59,s8],[62,s8],[55,s8],[59,s8],[55,s8],[59,s8],[62,s8],
+      [53,s8],[57,s8],[60,s8],[53,s8],[57,s8],[53,s8],[57,s8],[60,s8],[null,QT],
+      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
+      [null,QT+s8],[52,s8],[56,s8],[59,s8],[52,s8],[56,s8],[59,s8],
+      [null,QT+s8],[48,s8],[52,s8],[55,s8],
+      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
+      [null,QT+s8],[52,s8],[56,s8],[59,s8],[null,QT+s8],[52,s8],[55,s8],[59,s8],[57,WH],
+      // section C : basse en croches, harmonies Fa M / Do M
+      [41,HF],[41,HF],[41,HF],
+      [36,HF],
+      [43,HF],[43,HF],
+      [41,QT],[39,QT],
+      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
+      [null,QT+s8],[52,s8],[56,s8],[59,s8],[52,s8],[56,s8],[59,s8],
+      [null,QT+s8],[48,s8],[52,s8],[55,s8],
+      [null,QT+s8],[57,s8],[60,s8],[64,s8],[57,s8],[60,s8],[64,s8],
+      [null,QT+s8],[52,s8],[56,s8],[59,s8],[null,QT+s8],[45,s8],[52,s8],[57,s8],[57,WH],
     ], 'L'),
-    ped([[0,4],[4,8],[8,12],[20,24],[24,28],[28,36],[36,40],[40,44],[44,50]])
+    ped([[0,4],[4,8],[8,12],[20,24],[24,28],[28,36],[36,40],[40,44],[44,50],
+         [50,54],[54,58],[58,62],[62,66],[66,70],[70,80],[80,84],[84,88],
+         [88,92],[92,100]])
   )},
 
   // ----------------------------------------------------------------
@@ -412,22 +453,45 @@ const SONGS = {
     ], 'L')
   )},
 
-  menuet_bach: { name:'Menuet en Sol — Bach (attrib.)', level:'debutant', genre:'classique', ...merge(
+  menuet_bach: { name:'Menuet en Sol (version longue) — Bach (attrib.)', level:'debutant', genre:'classique', ...merge(
     seq([
+      // ---- Menuet ----
       [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
       [67,HF],[62,QT],[64,QT],
       [65,QT],[67,QT],[65,QT],[62,QT],[67,HF],
       [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
       [67,HF],[74,QT],[72,QT],
       [71,QT],[69,QT],[67,QT],[65,QT],[62,HF],
+      // ---- Trio : plus léger, registre plus aigu ----
+      [74,QT],[76,QT],[77,QT],[79,QT],[77,QT],[76,QT],
+      [74,HF],[71,QT],[72,QT],
+      [74,QT],[72,QT],[71,QT],[69,QT],[67,HF],
+      [74,QT],[76,QT],[77,QT],[79,QT],[77,QT],[76,QT],
+      [74,HF],[76,QT],[74,QT],
+      [72,QT],[71,QT],[69,QT],[67,QT],[67,HF],
+      // ---- Da capo : retour du menuet ----
+      [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
+      [67,HF],[62,QT],[64,QT],
+      [65,QT],[67,QT],[65,QT],[62,QT],[67,HF],
+      [67,QT],[71,QT],[74,QT],[76,QT],[74,QT],[71,QT],
+      [67,HF],[74,QT],[72,QT],
+      [71,QT],[69,QT],[67,QT],[65,QT],[62,WH],
     ], 'R'),
     seq([
       [55,HF],[59,HF], [43,HF],[50,HF],
       [55,HF],[59,HF],
       [55,HF],[59,HF], [43,HF],[50,HF],
       [55,HF],[59,HF],
+      [62,HF],[67,HF], [55,HF],[59,HF],
+      [55,HF],[62,HF],
+      [62,HF],[67,HF], [55,HF],[59,HF],
+      [55,HF],[59,HF],
+      [55,HF],[59,HF], [43,HF],[50,HF],
+      [55,HF],[59,HF],
+      [55,HF],[59,HF], [43,HF],[50,HF],
+      [55,WH],
     ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16]])
+    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,32],[32,36],[36,40]])
   )},
 
   petit_train: { name:'Le petit train — exercice', level:'debutant', genre:'traditionnel', ...merge(
@@ -465,8 +529,9 @@ const SONGS = {
   // NOUVEAUX MORCEAUX — INTERMÉDIAIRE
   // ==================================================================
 
-  clair_de_lune: { name:'Clair de lune (extrait) — Debussy', level:'intermediaire', genre:'classique', ...merge(
+  clair_de_lune: { name:'Clair de lune (version longue) — Debussy', level:'intermediaire', genre:'classique', ...merge(
     seq([
+      // ---- A : thème principal ----
       [68,HF],[null,QT],[70,HF*0.9],[null,QT],
       [73,HF],[null,QT],[75,HF*0.9],[null,QT],
       [76,QT],[75,QT],[73,QT],[70,QT],
@@ -475,18 +540,52 @@ const SONGS = {
       [71,HF],[null,QT],[73,HF*0.9],[null,QT],
       [75,QT],[73,QT],[71,QT],[68,QT],
       [66,WH],
+      // ---- B : section centrale, plus mouvante, registre plus aigu ----
+      [80,s8],[78,s8],[76,s8],[75,s8],[73,QT],[71,QT],
+      [78,s8],[76,s8],[75,s8],[73,s8],[71,QT],[70,QT],
+      [76,s8],[75,s8],[73,s8],[71,s8],[70,QT],[68,QT],
+      [73,HF],[null,HF],
+      [80,s8],[78,s8],[76,s8],[75,s8],[73,QT],[71,QT],
+      [78,s8],[76,s8],[75,s8],[73,s8],[71,QT],[70,QT],
+      [71,QT],[73,QT],[75,QT],[76,QT],
+      [78,WH],
+      // ---- Retour de A, plus dépouillé ----
+      [68,HF],[null,QT],[70,HF*0.9],[null,QT],
+      [73,HF],[null,QT],[75,HF*0.9],[null,QT],
+      [76,QT],[75,QT],[73,QT],[70,QT],
+      [68,WH],
+      // ---- Coda ----
+      [66,HF],[63,HF],
+      [61,WH+HF],
     ], 'R'),
     seq([
       [44,WH],[51,WH],
       [44,WH],[51,WH],
       [42,WH],[49,WH],
       [42,WH],[49,WH],
+      [37,WH],[44,WH],
+      [37,WH],[44,WH],
+      [35,WH],[42,WH],
+      [35,HF],[42,HF],
+      [37,WH],[44,WH],
+      [37,WH],[44,WH],
+      [35,HF],[42,HF],
+      [42,WH],
+      [44,WH],[51,WH],
+      [44,WH],[51,WH],
+      [42,WH],[49,WH],
+      [42,WH],[49,WH],
+      [37,HF],[42,HF],
+      [37,WH+HF],
     ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,32]])
+    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,32],
+         [32,36],[36,40],[40,44],[44,48],[48,52],[52,56],[56,60],[60,64],
+         [64,68],[68,72],[72,76],[76,80],[80,84],[84,90]])
   )},
 
-  valse_minute: { name:'Valse minute (extrait) — Chopin', level:'intermediaire', genre:'classique', ...merge(
+  valse_minute: { name:'Valse minute (version longue) — Chopin', level:'intermediaire', genre:'classique', ...merge(
     seq([
+      // ---- A ----
       [75,s8],[74,s8],[75,s8],[79,QT],[77,QT],
       [75,s8],[74,s8],[75,s8],[74,QT],[72,QT],
       [70,s8],[72,s8],[74,s8],[75,QT],[74,QT],
@@ -495,41 +594,107 @@ const SONGS = {
       [75,s8],[74,s8],[75,s8],[74,QT],[72,QT],
       [70,s8],[72,s8],[74,s8],[75,QT],[74,QT],
       [72,WH],
+      // ---- B : section contrastante, registre plus grave et legato ----
+      [67,QT],[70,QT],[72,QT],
+      [74,HF],[72,QT],
+      [70,QT],[67,QT],[65,QT],
+      [67,WH],
+      [65,QT],[67,QT],[70,QT],
+      [72,HF],[70,QT],
+      [67,QT],[65,QT],[63,QT],
+      [65,WH],
+      // ---- Retour de A (da capo) ----
+      [75,s8],[74,s8],[75,s8],[79,QT],[77,QT],
+      [75,s8],[74,s8],[75,s8],[74,QT],[72,QT],
+      [70,s8],[72,s8],[74,s8],[75,QT],[74,QT],
+      [72,WH],
+      // ---- Coda ----
+      [74,s8],[75,s8],[77,s8],[79,QT],[84,HF],
     ], 'R'),
     seq([
       [63,QT],[67,QT],[70,QT], [63,QT],[67,QT],[70,QT],
       [61,QT],[65,QT],[68,QT], [61,QT],[65,QT],[68,QT],
       [63,QT],[67,QT],[70,QT], [63,QT],[67,QT],[70,QT],
       [61,QT],[65,QT],[68,QT], [61,QT],[65,QT],[68,QT],
+      [55,QT],[58,QT],[62,QT],
+      [55,HF],[58,QT],
+      [53,QT],[58,QT],[60,QT],
+      [55,WH],
+      [53,QT],[58,QT],[60,QT],
+      [53,HF],[58,QT],
+      [51,QT],[55,QT],[58,QT],
+      [53,WH],
+      [63,QT],[67,QT],[70,QT], [63,QT],[67,QT],[70,QT],
+      [61,QT],[65,QT],[68,QT], [61,QT],[65,QT],[68,QT],
+      [60,HF],
     ], 'L')
   )},
 
-  reverie_schumann: { name:'Rêverie — Schumann', level:'intermediaire', genre:'classique', ...merge(
+  reverie_schumann: { name:'Rêverie (version longue) — Schumann', level:'intermediaire', genre:'classique', ...merge(
     seq([
+      // ---- Thème ----
       [69,QT],[74,QT*1.5],[72,s8],[71,QT],[69,QT],
       [67,HF],[69,QT],[71,QT],
       [72,WH],
       [74,QT],[77,QT*1.5],[76,s8],[74,QT],[72,QT],
       [71,HF],[72,QT],[74,QT],
       [76,WH],
+      // ---- Développement : montée vers l'aigu, plus intense ----
+      [79,QT],[81,QT*1.5],[79,s8],[77,QT],[76,QT],
+      [74,HF],[76,QT],[77,QT],
+      [79,WH],
+      [77,QT],[74,QT*1.5],[72,s8],[71,QT],[69,QT],
+      [67,HF],[69,QT],[71,QT],
+      [72,WH],
+      // ---- Retour du thème, plus dépouillé ----
+      [69,QT],[74,QT*1.5],[72,s8],[71,QT],[69,QT],
+      [67,HF],[69,QT],[71,QT],
+      [72,WH],
+      // ---- Coda apaisée ----
+      [67,HF],[64,HF],
+      [69,WH+HF],
     ], 'R'),
     seq([
       [45,HF],[52,HF], [45,HF],[52,HF],
       [43,HF],[50,HF], [43,HF],[50,HF],
       [50,HF],[57,HF], [50,HF],[57,HF],
       [48,HF],[55,HF], [48,HF],[55,HF],
+      [52,HF],[59,HF], [52,HF],[59,HF],
+      [50,HF],[57,HF], [50,HF],[57,HF],
+      [45,HF],[52,HF], [45,HF],[52,HF],
+      [43,HF],[50,HF], [43,HF],[50,HF],
+      [45,HF],[52,HF], [45,HF],[52,HF],
+      [43,HF],[50,HF], [43,HF],[50,HF],
+      [45,HF],[52,HF],
+      [45,WH+HF],
     ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16]])
+    ped([[0,4],[4,8],[8,12],[12,16],[16,20],[20,24],[24,28],[28,32],
+         [32,36],[36,40],[40,44],[44,50]])
   )},
 
-  habanera: { name:'Habanera (Carmen) — Bizet', level:'intermediaire', genre:'classique', ...merge(
+  habanera: { name:'Habanera (Carmen) — version longue — Bizet', level:'intermediaire', genre:'classique', ...merge(
     seq([
+      // ---- Couplet 1 : descente chromatique ----
       [64,QT+s16],[63,s16],[62,QT+s16],[63,s16],[64,QT+s16],[63,s16],[62,QT+s16],[63,s16],
       [64,QT],[59,QT],[60,QT],[62,QT],
       [63,HF],[null,HF],
       [65,QT+s16],[64,s16],[63,QT+s16],[64,s16],[65,QT+s16],[64,s16],[63,QT+s16],[64,s16],
       [65,QT],[60,QT],[62,QT],[63,QT],
       [64,WH],
+      // ---- Refrain "L'amour est enfant de bohême" : en majeur, plus dansant ----
+      [null,QT],[71,QT],[71,QT],[71,QT],
+      [71,QT],[69,QT],[67,QT],[66,QT],
+      [67,HF],[null,HF],
+      [null,QT],[69,QT],[69,QT],[69,QT],
+      [69,QT],[67,QT],[66,QT],[64,QT],
+      [66,WH],
+      // ---- Couplet 2 : reprise de la descente chromatique, un ton plus haut ----
+      [66,QT+s16],[65,s16],[64,QT+s16],[65,s16],[66,QT+s16],[65,s16],[64,QT+s16],[65,s16],
+      [66,QT],[61,QT],[62,QT],[64,QT],
+      [65,HF],[null,HF],
+      [67,QT+s16],[66,s16],[65,QT+s16],[66,s16],[67,QT+s16],[66,s16],[65,QT+s16],[66,s16],
+      [67,QT],[62,QT],[64,QT],[65,QT],
+      [66,WH],
     ], 'R'),
     seq([
       [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
@@ -537,21 +702,62 @@ const SONGS = {
       [43,s8],[50,s8],[43,s8],[50,s8], [43,s8],[50,s8],[43,s8],[50,s8],
       [46,s8],[53,s8],[46,s8],[53,s8], [46,s8],[53,s8],[46,s8],[53,s8],
       [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
+      [43,QT],[59,QT],[43,QT],[59,QT],
+      [41,QT],[57,QT],[38,QT],[54,QT],
+      [43,HF],[59,HF],
+      [43,QT],[59,QT],[43,QT],[59,QT],
+      [41,QT],[57,QT],[38,QT],[54,QT],
+      [43,WH],
+      [47,s8],[54,s8],[47,s8],[54,s8], [47,s8],[54,s8],[47,s8],[54,s8],
+      [47,s8],[54,s8],[47,s8],[54,s8], [47,s8],[54,s8],[47,s8],[54,s8],
+      [45,s8],[52,s8],[45,s8],[52,s8], [45,s8],[52,s8],[45,s8],[52,s8],
+      [48,s8],[55,s8],[48,s8],[55,s8], [48,s8],[55,s8],[48,s8],[55,s8],
+      [47,s8],[54,s8],[47,s8],[54,s8], [47,s8],[54,s8],[47,s8],[54,s8],
     ], 'L')
   )},
 
-  marche_turque: { name:'Marche turque (extrait 2) — Beethoven', level:'intermediaire', genre:'classique', ...merge(
+  marche_turque: { name:'Marche turque (version longue) — Beethoven', level:'intermediaire', genre:'classique', ...merge(
     seq([
+      // ---- A ----
       [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
       [76,s8],[74,s8],[72,s8],[71,QT],[72,HF],
       [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
       [77,s8],[76,s8],[74,s8],[72,QT],[71,HF],
+      // ---- B : couplet en majeur, plus large ----
+      [79,QT],[77,QT],[76,QT],[74,QT],
+      [72,QT],[74,QT],[76,QT],[77,QT],
+      [79,QT],[77,QT],[76,QT],[74,QT],
+      [72,WH],
+      [76,QT],[74,QT],[72,QT],[71,QT],
+      [69,QT],[71,QT],[72,QT],[74,QT],
+      [76,QT],[74,QT],[72,QT],[71,QT],
+      [72,WH],
+      // ---- Retour de A ----
+      [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
+      [76,s8],[74,s8],[72,s8],[71,QT],[72,HF],
+      [72,s8],[71,s8],[72,s8],[74,QT],[74,s8],[73,s8],[74,s8],[76,QT],
+      [77,s8],[76,s8],[74,s8],[72,QT],[71,HF],
+      // ---- Coda martiale ----
+      [72,s8],[74,s8],[76,s8],[79,s8],[84,QT],[79,QT],[72,WH],
     ], 'R'),
     seq([
       [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
       [53,QT],[57,QT],[60,QT], [48,QT],[55,QT],[60,QT],
       [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
       [53,QT],[57,QT],[60,QT], [48,WH],
+      [55,QT],[59,QT],[62,QT], [55,QT],[59,QT],[62,QT],
+      [53,QT],[57,QT],[60,QT], [53,QT],[57,QT],[60,QT],
+      [55,QT],[59,QT],[62,QT], [55,QT],[59,QT],[62,QT],
+      [48,WH],
+      [45,QT],[52,QT],[57,QT], [45,QT],[52,QT],[57,QT],
+      [53,QT],[57,QT],[60,QT], [45,QT],[52,QT],[57,QT],
+      [45,QT],[52,QT],[57,QT], [45,QT],[52,QT],[57,QT],
+      [48,WH],
+      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [53,QT],[57,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [48,QT],[55,QT],[60,QT], [48,QT],[55,QT],[60,QT],
+      [53,QT],[57,QT],[60,QT], [48,WH],
+      [48,QT],[55,QT],[60,QT],[64,QT],[48,HF],
     ], 'L')
   )},
 
@@ -626,18 +832,47 @@ const SONGS = {
     ], 'L')
   )},
 
-  mont_chauve: { name:'Une nuit sur le mont Chauve (extrait) — Moussorgski', level:'expert', genre:'film', ...merge(
+  mont_chauve: { name:'Une nuit sur le mont Chauve (version longue) — Moussorgski', level:'expert', genre:'film', ...merge(
     seq([
+      // ---- Thème du sabbat ----
       [60,s16],[63,s16],[67,s16],[70,s16],[72,QT],[70,s16],[67,s16],[63,s16],[60,QT],
       [58,s16],[61,s16],[65,s16],[68,s16],[70,QT],[68,s16],[65,s16],[61,s16],[58,QT],
       [56,QT],[60,QT],[63,QT],[67,HF],
       [60,WH],
+      // ---- Développement : intensité croissante, registre plus aigu ----
+      [72,s16],[75,s16],[79,s16],[82,s16],[84,QT],[82,s16],[79,s16],[75,s16],[72,QT],
+      [70,s16],[73,s16],[77,s16],[80,s16],[82,QT],[80,s16],[77,s16],[73,s16],[70,QT],
+      [68,QT],[72,QT],[75,QT],[79,HF],
+      [72,QT],[75,QT],[79,QT],[84,HF],
+      [82,s16],[79,s16],[75,s16],[72,s16],[68,QT],[72,QT],[75,QT],[79,QT],
+      [84,WH],
+      // ---- Sommet du tumulte ----
+      [84,s8],[82,s8],[79,s8],[75,s8],[72,s8],[70,s8],[67,s8],[63,s8],
+      [60,HF],[null,HF],
+      // ---- Cloches de l'aube : apaisement final ----
+      [72,WH],[null,QT],
+      [67,WH],[null,QT],
+      [64,WH],[null,QT],
+      [60,WH+WH],
     ], 'R'),
     seq([
       [36,HF],[43,HF], [34,HF],[41,HF],
       [32,HF],[39,HF], [36,WH],
+      [48,HF],[55,HF], [46,HF],[53,HF],
+      [44,HF],[51,HF],
+      [48,HF],[55,HF],
+      [44,HF],[51,HF],
+      [48,WH],
+      [36,WH],[null,WH],
+      [48,WH],[null,QT],
+      [43,WH],[null,QT],
+      [36,WH],[null,QT],
+      [36,WH+WH],
     ], 'L'),
-    ped([[0,4],[4,8],[8,12],[12,16]])
+    ped([[0,4],[4,8],[8,12],[12,16],
+         [16,20],[20,24],[24,28],[28,32],[32,36],
+         [36,40],
+         [40,48],[48,56],[56,64],[64,72]])
   )},
 
   mont_roi: { name:'Dans l\u2019antre du roi de la montagne — Grieg', level:'expert', genre:'film', ...merge(
@@ -732,14 +967,31 @@ const SONGS = {
     ], 'L')
   )},
 
-  burgmuller_arabesque: { name:'L\u2019Arabesque (extrait) — Burgmüller', level:'exercice', genre:'exercice', ...merge(
+  burgmuller_arabesque: { name:'L\u2019Arabesque (version longue) — Burgmüller', level:'exercice', genre:'exercice', ...merge(
     seq([
+      // ---- A ----
       [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
       [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[73,s16],[71,s16],
       [69,QT],[null,QT],
       [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
       [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[72,s16],[71,s16],
       [69,HF],
+      // ---- B : section contrastante, plus legato ----
+      [81,s8],[79,s8],[77,s8],[76,QT],
+      [74,s8],[76,s8],[77,s8],[79,QT],
+      [81,s8],[79,s8],[77,s8],[76,QT],
+      [74,HF],
+      [77,s8],[76,s8],[74,s8],[73,QT],
+      [71,s8],[73,s8],[74,s8],[76,QT],
+      [77,s8],[76,s8],[74,s8],[73,QT],
+      [71,HF],
+      // ---- Retour de A ----
+      [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
+      [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[73,s16],[71,s16],
+      [69,QT],[null,QT],
+      [76,s16],[74,s16],[73,s16],[74,s16],[76,s16],[74,s16],[73,s16],[74,s16],
+      [76,s16],[77,s16],[79,s16],[77,s16],[76,s16],[74,s16],[72,s16],[71,s16],
+      [69,WH],
     ], 'R'),
     seq([
       [45,QT],[52,QT],[57,QT],[52,QT],
@@ -748,6 +1000,18 @@ const SONGS = {
       [45,QT],[52,QT],[57,QT],[52,QT],
       [45,QT],[52,QT],[57,QT],[52,QT],
       [45,HF],
+      [50,QT],[57,QT],[62,QT],[57,QT],
+      [50,QT],[57,QT],[62,QT],[57,QT],
+      [50,HF],
+      [46,QT],[53,QT],[58,QT],[53,QT],
+      [46,QT],[53,QT],[58,QT],[53,QT],
+      [46,HF],
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,HF],
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,QT],[52,QT],[57,QT],[52,QT],
+      [45,WH],
     ], 'L')
   )},
 
