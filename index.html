@@ -633,6 +633,7 @@
     color:#fff; background:linear-gradient(90deg,#e05252,#b02020); border-color:transparent;
   }
   .btn-ed-undo{  color:var(--text); background:rgba(255,255,255,.1); border:1px solid var(--panel-line); }
+  .btn-ed-save{ color:#08130e; background:linear-gradient(90deg,#34d399,#10b981); font-weight:600; }
   .btn-ed-export{ color:#0a0912; background:linear-gradient(90deg,var(--cyan),var(--violet)); }
   .btn-ed-close{  color:var(--muted); background:rgba(255,255,255,.07); border:1px solid var(--panel-line); }
 
@@ -1064,6 +1065,7 @@
       <button class="ed-tab active" data-mode="cut">✂ Couper</button>
       <button class="ed-tab" data-mode="delete">🗑 Supprimer note</button>
       <button class="ed-tab" data-mode="add">➕ Ajouter note</button>
+      <button class="ed-tab" data-mode="move">↕ Déplacer</button>
     </div>
 
     <!-- Actions -->
@@ -1078,6 +1080,7 @@
         <button class="btn-zoom" id="edZoomFit" title="Vue complète" style="font-size:13px;width:auto;padding:0 8px">⟷</button>
       </div>
       <button class="btn-ed-action btn-ed-undo" id="edUndo">↩ Annuler</button>
+      <button class="btn-ed-action btn-ed-save" id="edSave">💾 Enregistrer</button>
       <button class="btn-ed-action btn-ed-export" id="edExport">⬇ Exporter MIDI</button>
       <button class="btn-ed-action btn-ed-close" id="edClose">✕ Fermer</button>
     </div>
@@ -1112,6 +1115,16 @@
     <button class="btn-ed-action btn-ed-arm" id="edArmSelect">🎯 Activer la sélection</button>
     <div style="flex:1;font-size:12px;color:var(--muted)" id="edCutInfo">Clique sur « Activer la sélection » puis clique-glisse sur la partition pour choisir une zone à couper</div>
     <button class="btn-ed-action btn-ed-cut hidden" id="edCutBtn">✂ Couper la sélection</button>
+  </div>
+
+  <!-- Barre de transposition (mode déplacer) -->
+  <div id="edMoveBar" class="hidden" style="display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap">
+    <div style="flex:1;font-size:12px;color:var(--muted);min-width:180px" id="edMoveInfo">Tape les notes à sélectionner, ou glisse un cadre autour d'un groupe</div>
+    <button class="btn-ed-action" id="edTrM12" title="Descendre d'une octave">⬇ −1 oct</button>
+    <button class="btn-ed-action" id="edTrM1" title="Descendre d'un demi-ton">−1</button>
+    <button class="btn-ed-action" id="edTrP1" title="Monter d'un demi-ton">+1</button>
+    <button class="btn-ed-action" id="edTrP12" title="Monter d'une octave">⬆ +1 oct</button>
+    <button class="btn-ed-action" id="edSelClear" title="Tout désélectionner">✕</button>
   </div>
 
 </div>
@@ -2716,6 +2729,9 @@ Règles :
   let edSelectArmed = false; // il faut cliquer sur "Activer la sélection" avant de pouvoir couper
   let edDragging = false;
   let edAddMidi = null;        // note sélectionnée pour ajout
+  let edSelNotes = new Set();  // notes sélectionnées (mode déplacer)
+  let edMarquee = null;        // cadre de sélection en cours
+  let edMoveCand = null;       // note candidate au tap (mode déplacer)
   let edAddDur  = 0.5;         // durée par défaut (noire)
   let edScroll  = 0;           // offset de vue (secondes)
   let edZoom    = 1;           // secondes visibles = songEnd/edZoom
@@ -2842,17 +2858,21 @@ Règles :
     document.querySelectorAll('.ed-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
     edWrap && (edWrap.className = 'editor-canvas-wrap mode-' + m);
     edSelA = null; edSelB = null; edAddMidi = null;
+    edSelNotes.clear(); edMarquee = null; edMoveCand = null;
     edSelectArmed = false;
     const armBtn = document.getElementById('edArmSelect');
     if(armBtn) armBtn.classList.remove('active');
     edCutBtn.classList.add('hidden');
     edKeyboard && edKeyboard.classList.toggle('hidden', m !== 'add');
     document.getElementById('edCutBar').classList.toggle('hidden', m !== 'cut');
+    document.getElementById('edMoveBar').classList.toggle('hidden', m !== 'move');
+    if(m === 'move') updateMoveInfo();
     updateStaffPreview();
     const hints = {
       cut:    '<b>Mode Couper :</b> Clique sur « 🎯 Activer la sélection », puis glisse verticalement pour choisir une zone. Sans ça : glisse pour défiler, pince pour zoomer, <b>tape un endroit pour y placer la lecture</b>.',
       delete: '<b>Mode Supprimer :</b> Clique sur une barre colorée pour supprimer cette note.',
-      add:    '<b>Mode Ajouter :</b> Choisis une note sur le clavier en bas, puis clique sur la partition pour la placer à cet endroit.'
+      add:    '<b>Mode Ajouter :</b> Tape directement sur la partition : la colonne choisit la note, la hauteur choisit le moment. Le clavier en bas sert à écouter les notes.',
+      move:   '<b>Mode Déplacer :</b> Tape une note pour la sélectionner (re-tape pour désélectionner), ou glisse un cadre autour d\'un groupe. Puis transpose avec les boutons en bas.'
     };
     edHint.innerHTML = hints[m] || '';
   }
@@ -2977,13 +2997,30 @@ Règles :
       }
     }
     else if(edMode === 'add'){
-      if(edAddMidi === null){ edHint.innerHTML = "<b>Mode Ajouter :</b> Choisis dabord une note sur le clavier ci-dessous."; return; }
+      // Tap direct : la colonne donne la note, la hauteur donne le moment
       const tStart = yToTime(y, h);
-      const hand   = edAddMidi >= (minMidi + maxMidi)/2 ? 'R' : 'L';
+      const midi   = xToMidi(x, w);
+      const hand   = midi >= (minMidi + maxMidi)/2 ? 'R' : 'L';
       edHistory.push(notes.map(n=>({...n})));
-      notes.push({ midi: edAddMidi, start: Math.max(0,tStart), dur: edAddDur, hand, hit:false });
+      notes.push({ midi, start: Math.max(0,tStart), dur: edAddDur, hand, hit:false });
       notes.sort((a,b)=>a.start-b.start);
       songEnd = notes.reduce((a,n)=>Math.max(a,n.start+n.dur),0);
+      // retour sonore + mise à jour de la mini-portée
+      edAddMidi = midi; updateStaffPreview();
+      Audio.resume(); Audio.play(midi, Audio.now(), Math.min(edAddDur,0.6), 0.7);
+    }
+    else if(edMode === 'move'){
+      // candidat au tap + départ éventuel d'un cadre de sélection
+      edMarquee = { x0:x, y0:y, x1:x, y1:y, active:false };
+      let best = null, bestDist = Infinity;
+      for(const n of notes){
+        const p  = edKeyX(n.midi, w);
+        const nx = p.x + p.w/2;
+        const ny = timeToY(n.start + n.dur/2, h);
+        const dist = Math.hypot(x - nx, y - ny);
+        if(dist < bestDist && dist < 30){ bestDist = dist; best = n; }
+      }
+      edMoveCand = best;
     }
   }
 
@@ -2993,6 +3030,13 @@ Règles :
   function onEdMove(e){
     const {x, y, w, h} = edCanvasCoords(e);
     edMouseX = x; edMouseY = y;
+
+    // cadre de sélection (mode déplacer)
+    if(edMode === 'move' && edDragging && edMarquee){
+      edMarquee.x1 = x; edMarquee.y1 = y;
+      if(Math.hypot(x - edMarquee.x0, y - edMarquee.y0) > 10) edMarquee.active = true;
+      return;
+    }
 
     // navigation au doigt (mode couper non armé)
     if(edMode === 'cut' && edDragging && !edSelectArmed && edPanY0 !== null){
@@ -3031,12 +3075,32 @@ Règles :
     // mode add : met à jour la note sous le curseur
     if(edMode === 'add'){
       const clamped = xToMidi(x, w);
-      edNoteInfo.textContent = NOTE_NAMES_FR[clamped%12] + Math.floor(clamped/12-1) +
-        (edAddMidi ? ' · clic pour placer' : ' · choisis dabord une note sur le clavier');
+      edNoteInfo.textContent = NOTE_NAMES_FR[clamped%12] + Math.floor(clamped/12-1) + ' · tape pour placer';
     }
   }
 
   function onEdUp(e){
+    // mode déplacer : valide le cadre ou bascule la note tapée
+    if(edMode === 'move' && edDragging && edMarquee){
+      const r = edCanvas.getBoundingClientRect(), w = r.width, h = r.height;
+      if(edMarquee.active){
+        const xA = Math.min(edMarquee.x0, edMarquee.x1), xB = Math.max(edMarquee.x0, edMarquee.x1);
+        const yA = Math.min(edMarquee.y0, edMarquee.y1), yB = Math.max(edMarquee.y0, edMarquee.y1);
+        for(const n of notes){
+          const p  = edKeyX(n.midi, w);
+          const nx = p.x + p.w/2;
+          const ny = timeToY(n.start + n.dur/2, h);
+          if(nx >= xA && nx <= xB && ny >= yA && ny <= yB) edSelNotes.add(n);
+        }
+      } else if(edMoveCand){
+        if(edSelNotes.has(edMoveCand)) edSelNotes.delete(edMoveCand);
+        else edSelNotes.add(edMoveCand);
+      }
+      updateMoveInfo();
+      edMarquee = null; edMoveCand = null;
+      edDragging = false; edPanY0 = null; edTapT = null; edTapMoved = false;
+      return;
+    }
     // tap simple (sans glissé) en navigation -> place la tête de lecture ici
     if(edDragging && edTapT !== null && !edTapMoved){
       edPlayT = Math.max(0, Math.min(songEnd, edTapT));
@@ -3215,11 +3279,74 @@ Règles :
       : 'Clique sur « Activer la sélection » puis clique-glisse sur la partition pour choisir une zone à couper';
   });
 
+  // ---- Transposition de la sélection (mode déplacer) ----
+  function updateMoveInfo(){
+    const el = document.getElementById('edMoveInfo');
+    if(!el) return;
+    const n = edSelNotes.size;
+    el.textContent = n
+      ? n + ' note' + (n>1?'s':'') + ' sélectionnée' + (n>1?'s':'') + ' — transpose avec les boutons'
+      : 'Tape les notes à sélectionner, ou glisse un cadre autour d\'un groupe';
+  }
+  function edTranspose(delta){
+    if(!edSelNotes.size) return;
+    edHistory.push(notes.map(n=>({...n})));
+    // ATTENTION : l'annulation remplace les objets notes, la sélection sera vidée
+    for(const n of edSelNotes){
+      n.midi = Math.max(21, Math.min(108, n.midi + delta));
+    }
+    // élargit le clavier si les notes sortent de la plage affichée
+    let lo = 127, hi = 0;
+    notes.forEach(n=>{ lo = Math.min(lo, n.midi); hi = Math.max(hi, n.midi); });
+    if(lo < minMidi || hi > maxMidi){
+      fitRange(notes); buildKeyboard(); buildEdKeyboard();
+    }
+    // retour sonore : la note la plus grave de la sélection
+    let lowest = null;
+    for(const n of edSelNotes) if(!lowest || n.midi < lowest.midi) lowest = n;
+    if(lowest){ Audio.resume(); Audio.play(lowest.midi, Audio.now(), 0.35, 0.6); }
+    updateMoveInfo();
+  }
+  document.getElementById('edTrM12').addEventListener('click', ()=> edTranspose(-12));
+  document.getElementById('edTrM1').addEventListener('click',  ()=> edTranspose(-1));
+  document.getElementById('edTrP1').addEventListener('click',  ()=> edTranspose(1));
+  document.getElementById('edTrP12').addEventListener('click', ()=> edTranspose(12));
+  document.getElementById('edSelClear').addEventListener('click', ()=>{ edSelNotes.clear(); updateMoveInfo(); });
+
+  // ---- Enregistrer (écrase le morceau perso, ou crée une copie d'un morceau intégré) ----
+  const edSaveBtn = document.getElementById('edSave');
+  function localSongExists(key){
+    try { return !!JSON.parse(localStorage.getItem('pianoflow_local_songs')||'{}')[key]; }
+    catch(e){ return false; }
+  }
+  edSaveBtn.addEventListener('click', ()=>{
+    if(!notes.length) return;
+    // copie propre des notes (sans les drapeaux de lecture internes)
+    const clean = notes.map(n=>({ midi:n.midi, start:n.start, dur:n.dur, hand:n.hand }));
+    let key  = currentSongKey;
+    let name = (SONGS[currentSongKey] && SONGS[currentSongKey].name) || 'Morceau';
+    if(!localSongExists(key)){
+      // morceau intégré du site : on crée une copie perso, l'original reste intact
+      key  = 'edit_' + currentSongKey + '_' + Date.now().toString(36);
+      name = name + ' (modifié)';
+      currentSongKey = key;
+      GistSync.addSongToSelect(key, name);
+      const sel = document.getElementById('songSelect');
+      if(sel) sel.value = key;
+    }
+    const song = GistSync.updateSongData(key, { name, notes: clean, pedal: pedalEvents || [], hasHands });
+    SONGS[key] = song;
+    // retour visuel
+    edSaveBtn.textContent = '✓ Enregistré';
+    setTimeout(()=>{ edSaveBtn.textContent = '💾 Enregistrer'; }, 1800);
+  });
+
   // ---- Annuler ----
   edUndo.addEventListener('click', ()=>{
     if(!edHistory.length) return;
     notes = edHistory.pop();
     songEnd = notes.reduce((a,n)=>Math.max(a,n.start+n.dur),0);
+    edSelNotes.clear(); updateMoveInfo();  // les objets notes ont été remplacés
   });
 
   // ---- Export MIDI ----
@@ -3299,6 +3426,32 @@ Règles :
       roundEdRect(nx, yTop, nw, nh, 3);
       edCtx.fill();
       edCtx.shadowBlur = 0;
+    }
+
+    // ---- Sélection du mode Déplacer ----
+    if(edMode === 'move'){
+      // contour blanc sur les notes sélectionnées
+      edCtx.lineWidth = 2;
+      edCtx.strokeStyle = 'rgba(255,255,255,.95)';
+      for(const n of edSelNotes){
+        const p = edKeyX(n.midi, W);
+        const yBot = timeToY(n.start, H);
+        const yTop = timeToY(n.start + n.dur, H);
+        if(yTop > H || yBot < 0) continue;
+        roundEdRect(p.x, yTop - 1, p.w, Math.max(5, yBot - yTop) + 2, 4);
+        edCtx.stroke();
+      }
+      // cadre de sélection en cours
+      if(edMarquee && edMarquee.active){
+        const xA = Math.min(edMarquee.x0, edMarquee.x1), yA = Math.min(edMarquee.y0, edMarquee.y1);
+        const mw = Math.abs(edMarquee.x1 - edMarquee.x0), mh = Math.abs(edMarquee.y1 - edMarquee.y0);
+        edCtx.fillStyle = 'rgba(255,255,255,.07)';
+        edCtx.fillRect(xA, yA, mw, mh);
+        edCtx.strokeStyle = 'rgba(255,255,255,.7)'; edCtx.lineWidth = 1.2;
+        edCtx.setLineDash([5,4]);
+        edCtx.strokeRect(xA, yA, mw, mh);
+        edCtx.setLineDash([]);
+      }
     }
 
     // ---- Sélection coupe (bande horizontale) ----
@@ -3637,7 +3790,25 @@ const GistSync = (()=>{
 
   tokenInp.addEventListener('keydown', e=>{ if(e.key==='Enter') tokenSave.click(); });
 
-  return { init, saveSong, deleteSong, restoreAll, addSongToSelect };
+  // Met à jour les données musicales d'un morceau en préservant les champs
+  // annexes (genre, image…) définis depuis la Bibliothèque.
+  // Local synchrone, gist en arrière-plan.
+  function updateSongData(key, patch){
+    const local = getLocalSongs();
+    const song = { ...(local[key] || {}), ...patch, savedAt: Date.now() };
+    local[key] = song;
+    setLocalSongs(local);
+    if(token){
+      (async ()=>{
+        const all = await loadFromGist().catch(()=>({}));
+        all[key] = { ...(all[key] || {}), ...patch, savedAt: song.savedAt };
+        saveToGist(all);
+      })();
+    }
+    return song;
+  }
+
+  return { init, saveSong, deleteSong, restoreAll, addSongToSelect, updateSongData };
 })();
 
 /* ============================================================
