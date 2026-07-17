@@ -66,6 +66,7 @@
   .genre-btn:nth-child(3){ animation-delay:.12s; }
   .genre-btn:nth-child(4){ animation-delay:.17s; }
   .genre-btn:nth-child(5){ animation-delay:.22s; }
+  .genre-btn:nth-child(6){ animation-delay:.27s; }
   @media(prefers-reduced-motion:reduce){ .genre-btn{ animation:none; } }
   .genre-btn{
     display:flex; flex-direction:column; align-items:flex-start; gap:6px;
@@ -114,10 +115,24 @@
     background:rgba(251,111,138,.28); border-color:#fb6f8a;
     color:#fff; font-size:13px; font-weight:600;
   }
+  .edit-song-btn{
+    flex-shrink:0; width:46px; height:46px; border-radius:50%;
+    background:rgba(196,160,255,.1); border:1px solid rgba(196,160,255,.32);
+    color:#c4a0ff; font-size:15px; display:flex; align-items:center; justify-content:center;
+    transition:background .15s, border-color .15s;
+  }
+  @media(hover:hover){ .edit-song-btn:hover{ background:rgba(196,160,255,.22); border-color:rgba(196,160,255,.6); } }
+  .edit-song-btn:active{ transform:scale(.94); }
   @media(hover:hover){ .song-card:hover{ background:rgba(255,255,255,.08); border-color:rgba(170,150,235,.4); } }
   .song-card .open-btn{
-    flex:1; display:flex; flex-direction:column; align-items:flex-start; gap:3px;
+    flex:1; display:flex; flex-direction:row; align-items:center; gap:11px;
     background:none; border:none; color:var(--text); padding:0; text-align:left;
+    min-width:0;
+  }
+  .song-card .open-txt{ display:flex; flex-direction:column; align-items:flex-start; gap:3px; min-width:0; }
+  .song-thumb{
+    flex-shrink:0; width:46px; height:46px; border-radius:11px; object-fit:cover;
+    border:1px solid rgba(255,255,255,.14);
   }
   .song-card .name{ font-size:13.5px; font-weight:600; line-height:1.35; }
   .song-card .stars{ font-size:11px; color:var(--gold); }
@@ -257,6 +272,31 @@
     border:1px solid rgba(150,130,210,.35); border-radius:10px; padding:9px 12px; outline:none; margin-bottom:14px;
   }
   .name-dialog .btns{ display:flex; gap:10px; justify-content:flex-end; }
+  .name-dialog select{
+    width:100%; font-size:13px; color:var(--text); background:rgba(255,255,255,.06);
+    border:1px solid rgba(150,130,210,.35); border-radius:10px; padding:11px 12px;
+    outline:none; margin-bottom:14px; min-height:44px;
+  }
+  .name-dialog select option{ background:#171230; }
+  .se-label{ display:block; font-size:11px; color:var(--muted); letter-spacing:.06em; text-transform:uppercase; margin:0 0 5px 2px; }
+  .se-img-row{ display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .se-img-preview{
+    width:74px; height:74px; border-radius:13px; object-fit:cover;
+    border:1px solid rgba(255,255,255,.18);
+  }
+  .se-img-btn{
+    display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--text);
+    background:rgba(255,255,255,.07); border:1px solid rgba(150,130,210,.35);
+    border-radius:10px; padding:11px 15px; min-height:44px; cursor:pointer;
+    touch-action:manipulation; user-select:none; -webkit-user-select:none;
+  }
+  .se-img-btn:active{ transform:scale(.96); }
+  .se-img-remove{
+    font-size:12.5px; color:#fb6f8a; background:none;
+    border:1px solid rgba(251,111,138,.35); border-radius:10px;
+    padding:10px 13px; min-height:42px;
+  }
+  .se-img-remove:active{ transform:scale(.96); }
 </style>
 </head>
 <body>
@@ -344,6 +384,30 @@
   </div>
 </div>
 
+<!-- ===== Modale édition d'un morceau perso (nom / catégorie / image) ===== -->
+<div class="name-dialog-bg" id="songEditBg" style="display:none">
+  <div class="name-dialog">
+    <h3>✏️ Modifier le morceau</h3>
+    <p>Change le nom, la catégorie ou l'image de ton morceau.</p>
+    <label class="se-label" for="seName">Nom</label>
+    <input type="text" id="seName" maxlength="60" />
+    <label class="se-label" for="seGenre">Catégorie</label>
+    <select id="seGenre"></select>
+    <label class="se-label">Image</label>
+    <div class="se-img-row">
+      <img id="seImgPreview" class="se-img-preview" alt="" style="display:none" />
+      <label class="se-img-btn">📷 Choisir une image
+        <input type="file" id="seImgFile" accept="image/*" style="display:none" />
+      </label>
+      <button id="seImgRemove" class="se-img-remove" style="display:none">✕ Retirer</button>
+    </div>
+    <div class="btns">
+      <button class="manage-btn-cancel" id="seCancel">Annuler</button>
+      <button class="manage-btn-open" id="seSave">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    Définition des genres (les morceaux viennent de songs-data.js)
@@ -353,6 +417,7 @@ const GENRES = [
   { id:'film',         label:'Musiques de film',  icon:'🎬', color:'#fb6f8a' },
   { id:'traditionnel', label:'Traditionnel',      icon:'🎵', color:'#ffd479' },
   { id:'exercice',     label:'Exercices',         icon:'🎓', color:'#c4a0ff' },
+  { id:'chanteurs',    label:'Chanteurs',         icon:'🎤', color:'#f472b6' },
   { id:'mymusic',      label:'Mes morceaux',      icon:'📁', color:'#34d399' },
 ];
 const DIFF_META = {
@@ -451,12 +516,17 @@ function renderPanel(gid){
       const stars = best ? starsFor(best) : '';
       const card = document.createElement('div');
       card.className = 'song-card';
+      const isCustom = customSongKeys.includes(key);
       card.innerHTML = `
         <button class="open-btn" data-key="${key}">
-          <span class="name">${s.name}</span>
-          ${stars ? `<span class="stars">${stars}</span>` : ''}
+          ${s.image ? `<img class="song-thumb" src="${s.image}" alt="" />` : ''}
+          <span class="open-txt">
+            <span class="name">${s.name}</span>
+            ${stars ? `<span class="stars">${stars}</span>` : ''}
+          </span>
         </button>
         <button class="preview-btn" data-key="${key}" title="Écouter un aperçu">▶</button>
+        ${isCustom ? `<button class="edit-song-btn" data-key="${key}" title="Modifier nom, catégorie, image">✏️</button>` : ''}
         ${gid === 'mymusic' ? `<button class="delete-btn" data-key="${key}" title="Supprimer ce morceau">🗑</button>` : ''}`;
       grid.appendChild(card);
     }
@@ -469,6 +539,9 @@ function renderPanel(gid){
   });
   panel.querySelectorAll('.preview-btn').forEach(b=>{
     b.addEventListener('click', ()=> togglePreview(b.dataset.key, b));
+  });
+  panel.querySelectorAll('.edit-song-btn').forEach(b=>{
+    b.addEventListener('click', ()=> openSongEdit(b.dataset.key));
   });
   panel.querySelectorAll('.delete-btn').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -513,6 +586,118 @@ async function deleteFromGist(key){
     body: JSON.stringify({ files:{ [FILENAME]: { content: JSON.stringify({songs:data.songs}, null, 2) } } })
   });
   if(!patch.ok) throw new Error('Échec suppression gist');
+}
+
+/* ============================================================
+   Édition d'un morceau perso : nom, catégorie, image
+   ============================================================ */
+const seBg        = document.getElementById('songEditBg');
+const seNameEl    = document.getElementById('seName');
+const seGenreEl   = document.getElementById('seGenre');
+const seImgFileEl = document.getElementById('seImgFile');
+const seImgPrev   = document.getElementById('seImgPreview');
+const seImgRemove = document.getElementById('seImgRemove');
+let seKey = null;
+let seImageData = null;
+
+function openSongEdit(key){
+  const s = SONGS[key];
+  if(!s) return;
+  seKey = key;
+  seNameEl.value = s.name || '';
+  // catégories proposées : aucune (= Mes morceaux seulement) + toutes sauf mymusic
+  seGenreEl.innerHTML = '<option value="">📁 Mes morceaux uniquement</option>' +
+    GENRES.filter(g=>g.id!=='mymusic')
+          .map(g=>`<option value="${g.id}">${g.icon} ${g.label}</option>`).join('');
+  seGenreEl.value = s.genre || '';
+  seImageData = s.image || null;
+  updateSeImgUI();
+  seBg.style.display = 'flex';
+}
+function closeSongEdit(){ seBg.style.display = 'none'; seKey = null; }
+function updateSeImgUI(){
+  if(seImageData){
+    seImgPrev.src = seImageData;
+    seImgPrev.style.display = '';
+    seImgRemove.style.display = '';
+  } else {
+    seImgPrev.removeAttribute('src');
+    seImgPrev.style.display = 'none';
+    seImgRemove.style.display = 'none';
+  }
+}
+
+// Redimensionne l'image choisie (max 320 px, JPEG) pour rester léger
+// dans le localStorage et le Gist
+function resizeImageFile(file, cb){
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 320;
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * k), h = Math.round(img.height * k);
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(cv.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = ()=> alert('Image illisible, essaie un autre fichier.');
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(file);
+}
+
+seImgFileEl.addEventListener('change', ()=>{
+  const f = seImgFileEl.files && seImgFileEl.files[0];
+  if(!f) return;
+  resizeImageFile(f, dataUrl => { seImageData = dataUrl; updateSeImgUI(); });
+  seImgFileEl.value = '';
+});
+seImgRemove.addEventListener('click', ()=>{ seImageData = null; updateSeImgUI(); });
+document.getElementById('seCancel').addEventListener('click', closeSongEdit);
+seBg.addEventListener('click', e=>{ if(e.target === seBg) closeSongEdit(); });
+
+document.getElementById('seSave').addEventListener('click', ()=>{
+  if(!seKey) return closeSongEdit();
+  const local = getLocalSongs();
+  const song = local[seKey];
+  if(!song){ closeSongEdit(); return; }
+  const newName = seNameEl.value.trim();
+  if(newName) song.name = newName;
+  if(seGenreEl.value) song.genre = seGenreEl.value; else delete song.genre;
+  if(seImageData) song.image = seImageData; else delete song.image;
+  setLocalSongsStorage(local);
+  SONGS[seKey] = song;
+  updateSongInGist(seKey, song).catch(e => console.warn('Sync gist :', e.message));
+  refreshCustomSongs();
+  closeSongEdit();
+});
+
+// Met à jour un morceau dans le Gist (sinon la sync annulerait les modifs
+// à la prochaine ouverture du piano)
+async function updateSongInGist(key, song){
+  const token  = localStorage.getItem('pianoflow_gh_token');
+  const gistId = localStorage.getItem('pianoflow_gist_id');
+  if(!token || !gistId) return;
+  const FILENAME = 'pianoflow_songs.json';
+  const headers = {
+    'Authorization': 'token ' + token,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+  const res = await fetch('https://api.github.com/gists/' + gistId, { headers });
+  if(!res.ok) throw new Error('Gist inaccessible');
+  const gist = await res.json();
+  const raw  = gist.files[FILENAME]?.content || '{"songs":{}}';
+  const data = JSON.parse(raw);
+  data.songs = data.songs || {};
+  data.songs[key] = song;
+  const patch = await fetch('https://api.github.com/gists/' + gistId, {
+    method:'PATCH', headers,
+    body: JSON.stringify({ files:{ [FILENAME]: { content: JSON.stringify({songs:data.songs}, null, 2) } } })
+  });
+  if(!patch.ok) throw new Error('Échec mise à jour gist');
 }
 
 function deleteCustomSong(key){
@@ -618,15 +803,15 @@ function loadCustomSongsIntoSongs(){
 }
 function refreshCustomSongs(){
   loadCustomSongsIntoSongs();
-  // met à jour le badge de comptage du bouton "Mes morceaux"
-  const idx = GENRES.findIndex(g=>g.id==='mymusic');
-  if(idx>=0){
-    const btn = genresGrid.children[idx];
-    const countEl = btn.querySelector('.count');
-    const n = customSongKeys.length;
-    countEl.textContent = n + ' morceau' + (n>1?'x':'');
-  }
-  if(activeGenre === 'mymusic') renderPanel('mymusic');
+  // met à jour les badges de comptage de TOUS les genres
+  // (un morceau perso peut maintenant appartenir à une catégorie)
+  GENRES.forEach((g,i)=>{
+    const btn = genresGrid.children[i];
+    if(!btn) return;
+    const n = songsForGenre(g.id).length;
+    btn.querySelector('.count').textContent = n + ' morceau' + (n>1?'x':'');
+  });
+  if(activeGenre) renderPanel(activeGenre);
   populateEditSelect();
 }
 
