@@ -101,6 +101,19 @@
     padding:14px 16px; min-height:60px; transition:background .15s, border-color .15s;
   }
   .song-card:active{ background:rgba(255,255,255,.1); }
+  .delete-btn{
+    flex-shrink:0; width:46px; height:46px; border-radius:50%;
+    background:rgba(251,111,138,.1); border:1px solid rgba(251,111,138,.3);
+    color:#fb6f8a; font-size:16px; display:flex; align-items:center; justify-content:center;
+    transition:background .15s, border-color .15s, width .2s;
+  }
+  @media(hover:hover){ .delete-btn:hover{ background:rgba(251,111,138,.22); border-color:rgba(251,111,138,.6); } }
+  .delete-btn:active{ transform:scale(.94); }
+  .delete-btn.confirm{
+    width:auto; padding:0 14px; border-radius:23px;
+    background:rgba(251,111,138,.28); border-color:#fb6f8a;
+    color:#fff; font-size:13px; font-weight:600;
+  }
   @media(hover:hover){ .song-card:hover{ background:rgba(255,255,255,.08); border-color:rgba(170,150,235,.4); } }
   .song-card .open-btn{
     flex:1; display:flex; flex-direction:column; align-items:flex-start; gap:3px;
@@ -443,7 +456,8 @@ function renderPanel(gid){
           <span class="name">${s.name}</span>
           ${stars ? `<span class="stars">${stars}</span>` : ''}
         </button>
-        <button class="preview-btn" data-key="${key}" title="Écouter un aperçu">▶</button>`;
+        <button class="preview-btn" data-key="${key}" title="Écouter un aperçu">▶</button>
+        ${gid === 'mymusic' ? `<button class="delete-btn" data-key="${key}" title="Supprimer ce morceau">🗑</button>` : ''}`;
       grid.appendChild(card);
     }
     section.appendChild(grid);
@@ -456,6 +470,63 @@ function renderPanel(gid){
   panel.querySelectorAll('.preview-btn').forEach(b=>{
     b.addEventListener('click', ()=> togglePreview(b.dataset.key, b));
   });
+  panel.querySelectorAll('.delete-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      if(b.classList.contains('confirm')){
+        deleteCustomSong(b.dataset.key);
+      } else {
+        // premier tap : demande confirmation, revient à la normale après 3,5 s
+        b.classList.add('confirm');
+        b.textContent = 'Supprimer ?';
+        clearTimeout(b._confirmTimer);
+        b._confirmTimer = setTimeout(()=>{
+          b.classList.remove('confirm');
+          b.textContent = '🗑';
+        }, 3500);
+      }
+    });
+  });
+}
+
+/* ============================================================
+   Suppression d'un morceau personnel (local + Gist)
+   ============================================================ */
+async function deleteFromGist(key){
+  const token  = localStorage.getItem('pianoflow_gh_token');
+  let   gistId = localStorage.getItem('pianoflow_gist_id');
+  if(!token || !gistId) return; // pas de sync configurée : rien à faire
+  const FILENAME = 'pianoflow_songs.json';
+  const headers = {
+    'Authorization': 'token ' + token,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+  const res = await fetch('https://api.github.com/gists/' + gistId, { headers });
+  if(!res.ok) throw new Error('Gist inaccessible');
+  const gist = await res.json();
+  const raw  = gist.files[FILENAME]?.content || '{"songs":{}}';
+  const data = JSON.parse(raw);
+  if(!data.songs || !(key in data.songs)) return; // déjà absent
+  delete data.songs[key];
+  const patch = await fetch('https://api.github.com/gists/' + gistId, {
+    method:'PATCH', headers,
+    body: JSON.stringify({ files:{ [FILENAME]: { content: JSON.stringify({songs:data.songs}, null, 2) } } })
+  });
+  if(!patch.ok) throw new Error('Échec suppression gist');
+}
+
+function deleteCustomSong(key){
+  // coupe l'aperçu si c'est ce morceau qui joue
+  stopPreview();
+  // local
+  const local = getLocalSongs();
+  delete local[key];
+  setLocalSongsStorage(local);
+  delete SONGS[key];
+  // gist (best-effort, sans bloquer l'interface)
+  deleteFromGist(key).catch(e => console.warn('Suppression gist :', e.message));
+  // rafraîchit badge + panneau
+  refreshCustomSongs();
 }
 
 /* ============================================================
