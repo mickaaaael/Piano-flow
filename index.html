@@ -80,6 +80,7 @@
     width:100%; justify-content:flex-start;
   }
 
+  body.editing .top-indicators{ display:none; }
   .top-indicators{
     position:fixed; top:14px; right:18px; z-index:60;
     display:flex; align-items:center; gap:8px; flex-wrap:wrap;
@@ -2813,6 +2814,7 @@ Règles :
 
   function closeEditor(){
     panel.classList.add('hidden');
+    document.body.classList.remove('editing');
     // Relayout pour restaurer les dimensions du canvas principal
     setTimeout(()=>{ layout(); }, 30);
   }
@@ -2820,8 +2822,9 @@ Règles :
   function openEditor(){
     if(!notes.length){ alert('Charge un morceau dabord !'); return; }
     pauseFn();
-    edScroll = 0; edZoom = 1; edSelA = null; edSelB = null;
+    edScroll = 0; edZoom = 1; edSelA = null; edSelB = null; edSeeked = false;
     panel.classList.remove('hidden');
+    document.body.classList.add('editing');
     initEdCanvas();
     setEdMode('cut');
     buildEdKeyboard();
@@ -2847,7 +2850,7 @@ Règles :
     document.getElementById('edCutBar').classList.toggle('hidden', m !== 'cut');
     updateStaffPreview();
     const hints = {
-      cut:    '<b>Mode Couper :</b> Clique sur « 🎯 Activer la sélection », puis glisse verticalement sur la partition pour choisir une zone. Sans ça, glisse pour faire défiler le morceau, pince pour zoomer.',
+      cut:    '<b>Mode Couper :</b> Clique sur « 🎯 Activer la sélection », puis glisse verticalement pour choisir une zone. Sans ça : glisse pour défiler, pince pour zoomer, <b>tape un endroit pour y placer la lecture</b>.',
       delete: '<b>Mode Supprimer :</b> Clique sur une barre colorée pour supprimer cette note.',
       add:    '<b>Mode Ajouter :</b> Choisis une note sur le clavier en bas, puis clique sur la partition pour la placer à cet endroit.'
     };
@@ -2940,6 +2943,8 @@ Règles :
   }
 
   let edPanY0 = null, edPanScroll0 = 0;
+  let edTapT = null, edTapMoved = false;   // tap simple = positionner la lecture
+  let edSeeked = false;                     // la tête a été placée manuellement
   function onEdDown(e){
     e.preventDefault();
     const {x, y, w, h} = edCanvasCoords(e);
@@ -2947,8 +2952,10 @@ Règles :
 
     if(edMode === 'cut'){
       if(!edSelectArmed){
-        // pas d'armement -> glisser verticalement fait défiler le morceau
+        // pas d'armement -> glisser verticalement fait défiler,
+        // un tap simple place la tête de lecture (voir onEdUp)
         edPanY0 = y; edPanScroll0 = edScroll;
+        edTapT = yToTime(y, h); edTapMoved = false;
         return;
       }
       edSelA = yToTime(y, h); edSelB = edSelA;
@@ -2989,9 +2996,12 @@ Règles :
 
     // navigation au doigt (mode couper non armé)
     if(edMode === 'cut' && edDragging && !edSelectArmed && edPanY0 !== null){
-      const visibleDur = songEnd / edZoom;
-      edScroll = Math.max(0, Math.min(songEnd - visibleDur,
-        edPanScroll0 + ((y - edPanY0) / h) * visibleDur));
+      if(Math.abs(y - edPanY0) > 8) edTapMoved = true;   // c'est un glissé, pas un tap
+      if(edTapMoved){
+        const visibleDur = songEnd / edZoom;
+        edScroll = Math.max(0, Math.min(songEnd - visibleDur,
+          edPanScroll0 + ((y - edPanY0) / h) * visibleDur));
+      }
       return;
     }
 
@@ -3026,7 +3036,16 @@ Règles :
     }
   }
 
-  function onEdUp(e){ edDragging = false; edPanY0 = null; }
+  function onEdUp(e){
+    // tap simple (sans glissé) en navigation -> place la tête de lecture ici
+    if(edDragging && edTapT !== null && !edTapMoved){
+      edPlayT = Math.max(0, Math.min(songEnd, edTapT));
+      edSeeked = true;
+      // resynchronise les notes déjà jouées pour une reprise propre
+      notes.forEach(n => { n._edPlayed = n.start < edPlayT; n._edFlash = null; });
+    }
+    edDragging = false; edPanY0 = null; edTapT = null; edTapMoved = false;
+  }
 
   // Molette : Ctrl = zoom, sinon défilement vertical dans le temps
   function onEdWheel(e){
@@ -3297,7 +3316,7 @@ Règles :
 
     // ---- Tête de lecture éditeur (ligne horizontale) ----
     // En lecture éditeur : suit edPlayT, sinon suit t (temps principal)
-    const playPos = edPlaying ? edPlayT : t;
+    const playPos = (edPlaying || edSeeked) ? edPlayT : t;
     const yPlay = timeToY(playPos, H);
     if(yPlay>=0 && yPlay<=H){
       // halo
