@@ -3550,27 +3550,28 @@ const GistSync = (()=>{
     }
   }
 
-  // Charge et affiche tous les morceaux sauvegardés dans la liste
-  async function restoreAll(){
-    // D'abord local (immédiat)
-    const local = getLocalSongs();
-    // Puis gist (async) — fusionne
-    let gistSongs = {};
-    if(token) gistSongs = await loadFromGist().catch(()=>({}));
-    const all = {...local, ...gistSongs};
-    // Fusionne vers local
-    setLocalSongs(all);
-    if(!Object.keys(all).length) return;
-    const sel = document.getElementById('songSelect');
-    const grp = document.createElement('optgroup');
-    grp.label = '💾 Mes morceaux';
-    grp.id = 'savedSongsGroup';
-    sel.appendChild(grp);
+  // Ajoute des morceaux sauvegardés dans SONGS + le sélecteur (sans doublons)
+  function addSavedSongs(all){
     const sorted = Object.entries(all).sort((a,b)=>(a[1].savedAt||0)-(b[1].savedAt||0));
     for(const [key, s] of sorted){
-      SONGS[key] = s;
-      addSongToSelect(key, s.name, grp);
+      const isNew = !SONGS[key];
+      SONGS[key] = s;                    // ajoute ou met à jour les données
+      if(isNew) addSongToSelect(key, s.name);
     }
+  }
+
+  // Charge et affiche tous les morceaux sauvegardés.
+  // 1) Le stockage local est appliqué IMMÉDIATEMENT (synchrone) pour que
+  //    l'ouverture directe ?song=X&edit=1 marche même avec la sync active.
+  // 2) Le gist est fusionné ensuite, en arrière-plan.
+  async function restoreAll(){
+    addSavedSongs(getLocalSongs());
+    if(!token) return;
+    const gistSongs = await loadFromGist().catch(()=>({}));
+    if(!Object.keys(gistSongs).length) return;
+    const all = {...getLocalSongs(), ...gistSongs};
+    setLocalSongs(all);
+    addSavedSongs(all);
   }
 
   function addSongToSelect(key, name, grp){
@@ -3780,27 +3781,40 @@ const LedStrip = (()=>{
    ============================================================ */
 LedStrip.init();
 GistSync.init();
-GistSync.restoreAll();
+const restorePromise = GistSync.restoreAll();   // local immédiat, gist en arrière-plan
 
 // Si on arrive depuis la Bibliothèque ou l'Apprentissage avec ?song=cle, on charge ce morceau
 const urlParams = new URLSearchParams(location.search);
 const urlSongKey = urlParams.get('song');
 const urlEdit = urlParams.get('edit') === '1';
-const startKey = (urlSongKey && SONGS[urlSongKey]) ? urlSongKey : 'ode';
-currentSongKey = startKey;
-const startSong = SONGS[startKey];
-loadNotes(startSong, startSong.name);
-if(urlSongKey && SONGS[urlSongKey]){
-  if(urlEdit){
-    // Arrivée depuis "Modifier" sur la Bibliothèque : ouvre directement l'éditeur
-    setTimeout(()=> document.getElementById('editBtn').click(), 150);
-  } else {
-    // Ouvre directement en mode entraînement, pratique pour un exercice ciblé depuis l'Apprentissage
-    const fromLearning = (SONGS[urlSongKey].level === 'exercice') || document.referrer.includes('apprentissage.html');
-    if(fromLearning && mode !== 'practice'){
-      document.getElementById('modeBtn').click();
+
+function startWithSong(key){
+  currentSongKey = key;
+  const s = SONGS[key];
+  loadNotes(s, s.name);
+  if(key === urlSongKey){
+    if(urlEdit){
+      // Arrivée depuis "Modifier" sur la Bibliothèque : ouvre directement l'éditeur
+      setTimeout(()=> document.getElementById('editBtn').click(), 150);
+    } else {
+      // Ouvre directement en mode entraînement, pratique pour un exercice ciblé depuis l'Apprentissage
+      const fromLearning = (s.level === 'exercice') || document.referrer.includes('apprentissage.html');
+      if(fromLearning && mode !== 'practice'){
+        document.getElementById('modeBtn').click();
+      }
     }
   }
+}
+
+if(urlSongKey && SONGS[urlSongKey]){
+  startWithSong(urlSongKey);
+} else if(urlSongKey){
+  // Morceau pas encore disponible (probablement en cours de sync gist) :
+  // on démarre sur le morceau par défaut et on bascule dès qu'il arrive
+  startWithSong('ode');
+  restorePromise.then(()=>{ if(SONGS[urlSongKey]) startWithSong(urlSongKey); });
+} else {
+  startWithSong('ode');
 }
 initMIDI();
 // Re-layout après que le DOM soit complètement rendu
