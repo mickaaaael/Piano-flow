@@ -614,7 +614,7 @@
   .ed-hint{
     font-size:12px; color:var(--muted); background:rgba(255,255,255,.05);
     border:1px solid var(--panel-line); border-radius:10px; padding:7px 14px;
-    flex:1; min-width:200px;
+    flex:0 0 auto; min-width:200px;
   }
   .ed-hint b{ color:var(--text); }
   .btn-ed-action{
@@ -2762,11 +2762,11 @@ Règles :
     // Scroll automatique pour suivre la lecture
     if(edCanvas){
       const r = edCanvas.getBoundingClientRect();
-      const W = r.width || 1;
+      const H = r.height || 1;
       const visibleDur = songEnd / edZoom;
-      // Si la tête de lecture sort de la vue, on fait défiler
-      const xNow = timeToX(edPlayT, W);
-      if(xNow > W * 0.85){
+      // Si la tête de lecture monte trop haut dans la vue, on fait défiler
+      const yNow = timeToY(edPlayT, H);
+      if(yNow < H * 0.15){
         edScroll = Math.max(0, edPlayT - visibleDur * 0.15);
       }
     }
@@ -2847,7 +2847,7 @@ Règles :
     document.getElementById('edCutBar').classList.toggle('hidden', m !== 'cut');
     updateStaffPreview();
     const hints = {
-      cut:    '<b>Mode Couper :</b> Clique sur « 🎯 Activer la sélection », puis clique-glisse sur la partition pour choisir une zone. Sans ça, tu peux naviguer et zoomer librement sans risque.',
+      cut:    '<b>Mode Couper :</b> Clique sur « 🎯 Activer la sélection », puis glisse verticalement sur la partition pour choisir une zone. Sans ça, glisse pour faire défiler le morceau, pince pour zoomer.',
       delete: '<b>Mode Supprimer :</b> Clique sur une barre colorée pour supprimer cette note.',
       add:    '<b>Mode Ajouter :</b> Choisis une note sur le clavier en bas, puis clique sur la partition pour la placer à cet endroit.'
     };
@@ -2908,33 +2908,58 @@ Règles :
     return { x: e.clientX - r.left, y: e.clientY - r.top,
              w: r.width, h: r.height };
   }
-  // pixel X → temps en secondes
-  function xToTime(x, w){ return edScroll + (x / w) * (songEnd / edZoom); }
-  // temps → pixel X
-  function timeToX(t, w){ return ((t - edScroll) / (songEnd / edZoom)) * w; }
-  // pixel Y → midi (approx)
-  function yToMidi(y, h){
-    const frac = 1 - y/h;
-    return Math.round(minMidi + frac * (maxMidi - minMidi));
+  // ---- Orientation verticale : le temps monte, comme en mode lecture ----
+  // pixel Y → temps en secondes (bas = plus tôt, haut = plus tard)
+  function yToTime(y, h){ return edScroll + ((h - y) / h) * (songEnd / edZoom); }
+  // temps → pixel Y
+  function timeToY(t, h){ return h - ((t - edScroll) / (songEnd / edZoom)) * h; }
+  // ---- Position horizontale : alignée sur un clavier (graves à gauche, aigus à droite) ----
+  let edLayoutCache = null;
+  function edKeyX(m, w){
+    if(!edLayoutCache || edLayoutCache.w !== w || edLayoutCache.lo !== minMidi || edLayoutCache.hi !== maxMidi){
+      const whites = []; for(let k = minMidi; k <= maxMidi; k++) if(!isBlack(k)) whites.push(k);
+      const ww = w / whites.length, bw = ww * 0.62;
+      const map = new Map(), wIdx = new Map();
+      whites.forEach((k,i)=>wIdx.set(k,i));
+      for(let k = minMidi; k <= maxMidi; k++){
+        if(!isBlack(k)) map.set(k, { x: wIdx.get(k)*ww, w: ww });
+        else            map.set(k, { x: (wIdx.get(k-1)+1)*ww - bw/2, w: bw });
+      }
+      edLayoutCache = { w, lo:minMidi, hi:maxMidi, map };
+    }
+    return edLayoutCache.map.get(Math.max(minMidi, Math.min(maxMidi, m)));
+  }
+  // pixel X → midi le plus proche
+  function xToMidi(x, w){
+    let best = minMidi, bd = Infinity;
+    for(let k = minMidi; k <= maxMidi; k++){
+      const p = edKeyX(k, w), cx = p.x + p.w/2, d = Math.abs(x - cx);
+      if(d < bd){ bd = d; best = k; }
+    }
+    return best;
   }
 
+  let edPanY0 = null, edPanScroll0 = 0;
   function onEdDown(e){
     e.preventDefault();
     const {x, y, w, h} = edCanvasCoords(e);
     edDragging = true;
 
     if(edMode === 'cut'){
-      if(!edSelectArmed) return; // pas d'armement -> on ignore, laisse naviguer/zoomer tranquille
-      edSelA = xToTime(x, w); edSelB = edSelA;
+      if(!edSelectArmed){
+        // pas d'armement -> glisser verticalement fait défiler le morceau
+        edPanY0 = y; edPanScroll0 = edScroll;
+        return;
+      }
+      edSelA = yToTime(y, h); edSelB = edSelA;
     }
     else if(edMode === 'delete'){
-      const t = xToTime(x, w);
-      const midi = yToMidi(y, h);
       // trouve la note la plus proche du clic
       let best = null, bestDist = Infinity;
       for(const n of notes){
-        const nx = timeToX(n.start + n.dur/2, w);
-        const ny = h * (1 - (n.midi - minMidi) / (maxMidi - minMidi));
+        const p  = edKeyX(n.midi, w);
+        const nx = p.x + p.w/2;
+        const ny = timeToY(n.start + n.dur/2, h);
         const dist = Math.hypot(x - nx, y - ny);
         if(dist < bestDist && dist < 30){ bestDist = dist; best = n; }
       }
@@ -2946,7 +2971,7 @@ Règles :
     }
     else if(edMode === 'add'){
       if(edAddMidi === null){ edHint.innerHTML = "<b>Mode Ajouter :</b> Choisis dabord une note sur le clavier ci-dessous."; return; }
-      const tStart = xToTime(x, w);
+      const tStart = yToTime(y, h);
       const hand   = edAddMidi >= (minMidi + maxMidi)/2 ? 'R' : 'L';
       edHistory.push(notes.map(n=>({...n})));
       notes.push({ midi: edAddMidi, start: Math.max(0,tStart), dur: edAddDur, hand, hit:false });
@@ -2962,8 +2987,16 @@ Règles :
     const {x, y, w, h} = edCanvasCoords(e);
     edMouseX = x; edMouseY = y;
 
+    // navigation au doigt (mode couper non armé)
+    if(edMode === 'cut' && edDragging && !edSelectArmed && edPanY0 !== null){
+      const visibleDur = songEnd / edZoom;
+      edScroll = Math.max(0, Math.min(songEnd - visibleDur,
+        edPanScroll0 + ((y - edPanY0) / h) * visibleDur));
+      return;
+    }
+
     if(edMode === 'cut' && edDragging && edSelectArmed){
-      edSelB = xToTime(x, w);
+      edSelB = yToTime(y, h);
       const tA = Math.min(edSelA, edSelB), tB = Math.max(edSelA, edSelB);
       const dur = (tB - tA).toFixed(1);
       edCutInfo.textContent = 'Sélection : ' + dur + 's';
@@ -2974,8 +3007,9 @@ Règles :
     if(edMode === 'delete'){
       let best = null, bestDist = Infinity;
       for(const n of notes){
-        const nx = timeToX(n.start + n.dur/2, w);
-        const ny = h * (1 - (n.midi - minMidi) / (maxMidi - minMidi));
+        const p  = edKeyX(n.midi, w);
+        const nx = p.x + p.w/2;
+        const ny = timeToY(n.start + n.dur/2, h);
         const dist = Math.hypot(x - nx, y - ny);
         if(dist < bestDist){ bestDist = dist; best = n; }
       }
@@ -2986,31 +3020,29 @@ Règles :
 
     // mode add : met à jour la note sous le curseur
     if(edMode === 'add'){
-      const hoverMidi = Math.round(yToMidi(y, h));
-      const clamped = Math.max(minMidi, Math.min(maxMidi, hoverMidi));
+      const clamped = xToMidi(x, w);
       edNoteInfo.textContent = NOTE_NAMES_FR[clamped%12] + Math.floor(clamped/12-1) +
         (edAddMidi ? ' · clic pour placer' : ' · choisis dabord une note sur le clavier');
     }
   }
 
-  function onEdUp(e){ edDragging = false; }
+  function onEdUp(e){ edDragging = false; edPanY0 = null; }
 
-  // Molette : Ctrl = zoom, sinon scroll horizontal
+  // Molette : Ctrl = zoom, sinon défilement vertical dans le temps
   function onEdWheel(e){
     e.preventDefault();
     if(e.ctrlKey || e.metaKey){
       // Zoom centré sur la position de la souris
-      const {x, w} = edCanvasCoords(e);
-      const tAtMouse = xToTime(x, w || 1);
-      const oldZoom = edZoom;
+      const {y, h} = edCanvasCoords(e);
+      const tAtMouse = yToTime(y, h || 1);
       edZoom = Math.max(1, Math.min(20, edZoom * (e.deltaY < 0 ? 1.25 : 0.8)));
       // Ajuste le scroll pour que la position sous la souris reste fixe
       const visibleDur = songEnd / edZoom;
-      edScroll = tAtMouse - (x / (w||1)) * visibleDur;
+      edScroll = tAtMouse - ((h - y) / (h||1)) * visibleDur;
       edScroll = Math.max(0, Math.min(songEnd - visibleDur, edScroll));
       document.getElementById('edZoomIndicator').textContent = 'zoom : ' + edZoom.toFixed(1) + '×';
     } else {
-      // Scroll horizontal
+      // Défilement dans le temps (molette bas = avancer)
       const visibleDur = songEnd / edZoom;
       edScroll = Math.max(0, Math.min(songEnd - visibleDur, edScroll + (e.deltaY/100) * visibleDur * 0.15));
     }
@@ -3043,8 +3075,8 @@ Règles :
       pinchDist0 = pinchDist(e);
       pinchZoom0 = edZoom;
       const r = edCanvas.getBoundingClientRect();
-      const midX = (e.touches[0].clientX + e.touches[1].clientX)/2 - r.left;
-      pinchCenterFrac = midX / r.width;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY)/2 - r.top;
+      pinchCenterFrac = 1 - midY / r.height;
       e.preventDefault();
     }
   }, {passive:false});
@@ -3197,76 +3229,88 @@ Règles :
 
     const visibleDur = songEnd / edZoom;
 
-    // grille temporelle (toutes les secondes)
-    edCtx.strokeStyle = 'rgba(150,130,210,.15)'; edCtx.lineWidth = 1;
-    for(let ts = Math.ceil(edScroll); ts < edScroll + visibleDur; ts++){
-      const x = timeToX(ts, W);
-      edCtx.beginPath(); edCtx.moveTo(x,0); edCtx.lineTo(x,H); edCtx.stroke();
-      edCtx.fillStyle='rgba(150,130,210,.4)'; edCtx.font='10px Inter';
-      edCtx.textAlign='left'; edCtx.fillText(ts+'s', x+2, 12);
-    }
-
-    // lignes de note (do de chaque octave)
+    // colonnes du clavier (fond alterné blanches/noires, comme en mode lecture)
     for(let m = minMidi; m <= maxMidi; m++){
-      if(m%12===0){
-        const y = H*(1-(m-minMidi)/(maxMidi-minMidi));
-        edCtx.strokeStyle='rgba(95,227,242,.12)'; edCtx.lineWidth=1;
-        edCtx.beginPath(); edCtx.moveTo(0,y); edCtx.lineTo(W,y); edCtx.stroke();
-        edCtx.fillStyle='rgba(95,227,242,.4)'; edCtx.font='9px Inter';
-        edCtx.textAlign='left'; edCtx.fillText('Do'+Math.floor(m/12-1), 3, y-2);
+      if(isBlack(m)){
+        const p = edKeyX(m, W);
+        edCtx.fillStyle = 'rgba(255,255,255,.025)';
+        edCtx.fillRect(p.x, 0, p.w, H);
       }
     }
 
-    // ---- Notes ----
+    // lignes verticales sur les Do de chaque octave
+    for(let m = minMidi; m <= maxMidi; m++){
+      if(m%12===0){
+        const p = edKeyX(m, W);
+        const x = p.x;
+        edCtx.strokeStyle='rgba(95,227,242,.14)'; edCtx.lineWidth=1;
+        edCtx.beginPath(); edCtx.moveTo(x,0); edCtx.lineTo(x,H); edCtx.stroke();
+        edCtx.fillStyle='rgba(95,227,242,.45)'; edCtx.font='9px Inter';
+        edCtx.textAlign='left'; edCtx.fillText('Do'+Math.floor(m/12-1), x+3, H-6);
+      }
+    }
+
+    // grille temporelle horizontale (toutes les secondes) — le temps monte
+    edCtx.lineWidth = 1;
+    for(let ts = Math.ceil(edScroll); ts < edScroll + visibleDur; ts++){
+      const y = timeToY(ts, H);
+      edCtx.strokeStyle = 'rgba(150,130,210,.15)';
+      edCtx.beginPath(); edCtx.moveTo(0,y); edCtx.lineTo(W,y); edCtx.stroke();
+      edCtx.fillStyle='rgba(150,130,210,.45)'; edCtx.font='10px Inter';
+      edCtx.textAlign='left'; edCtx.fillText(ts+'s', 3, y-3);
+    }
+
+    // ---- Notes (mêmes couleurs et même sens qu'en mode lecture) ----
     for(const n of notes){
-      const x1 = timeToX(n.start, W);
-      const x2 = timeToX(n.start + n.dur, W);
-      if(x2 < 0 || x1 > W) continue;
-      const y  = H * (1 - (n.midi - minMidi) / (maxMidi - minMidi));
-      const nw = Math.max(4, x2 - x1);
-      const nh = Math.max(6, H / (maxMidi - minMidi) * 0.85);
+      const yBot = timeToY(n.start, H);          // début de la note (en bas)
+      const yTop = timeToY(n.start + n.dur, H);  // fin de la note (plus haut)
+      if(yTop > H || yBot < 0) continue;
+      const p  = edKeyX(n.midi, W);
+      const nx = p.x + 1;
+      const nw = Math.max(5, p.w - 2);
+      const nh = Math.max(5, yBot - yTop);
       const black = isBlack(n.midi);
       const c1 = n.hand==='L' ? '#f9ca24' : (black?'#c4a0ff':'#5fe3f2');
       const c2 = n.hand==='L' ? '#f0932b' : (black?'#7c4ddf':'#1fb6cf');
-      const grd = edCtx.createLinearGradient(x1,0,x2,0);
+      const grd = edCtx.createLinearGradient(0,yTop,0,yBot);
       grd.addColorStop(0,c1); grd.addColorStop(1,c2);
       edCtx.fillStyle = grd;
       edCtx.shadowColor = n.hand==='L'?'rgba(249,202,36,.4)':'rgba(95,227,242,.4)';
       edCtx.shadowBlur = 6;
-      roundEdRect(x1, y - nh/2, nw, nh, 3);
+      roundEdRect(nx, yTop, nw, nh, 3);
       edCtx.fill();
       edCtx.shadowBlur = 0;
     }
 
-    // ---- Sélection coupe ----
+    // ---- Sélection coupe (bande horizontale) ----
     if(edMode==='cut' && edSelA!==null && edSelB!==null){
-      const xA = timeToX(Math.min(edSelA,edSelB), W);
-      const xB = timeToX(Math.max(edSelA,edSelB), W);
+      const tA = Math.min(edSelA,edSelB), tB = Math.max(edSelA,edSelB);
+      const yTop = timeToY(tB, H), yBot = timeToY(tA, H);
       edCtx.fillStyle = 'rgba(251,111,138,.18)';
-      edCtx.fillRect(xA, 0, xB-xA, H);
+      edCtx.fillRect(0, yTop, W, yBot-yTop);
       edCtx.strokeStyle = 'rgba(251,111,138,.8)'; edCtx.lineWidth = 1.5;
       edCtx.setLineDash([5,3]);
-      edCtx.beginPath(); edCtx.moveTo(xA,0); edCtx.lineTo(xA,H); edCtx.stroke();
-      edCtx.beginPath(); edCtx.moveTo(xB,0); edCtx.lineTo(xB,H); edCtx.stroke();
+      edCtx.beginPath(); edCtx.moveTo(0,yTop); edCtx.lineTo(W,yTop); edCtx.stroke();
+      edCtx.beginPath(); edCtx.moveTo(0,yBot); edCtx.lineTo(W,yBot); edCtx.stroke();
       edCtx.setLineDash([]);
     }
 
-    // ---- Tête de lecture éditeur ----
+    // ---- Tête de lecture éditeur (ligne horizontale) ----
     // En lecture éditeur : suit edPlayT, sinon suit t (temps principal)
     const playPos = edPlaying ? edPlayT : t;
-    const xPlay = timeToX(playPos, W);
-    if(xPlay>=0 && xPlay<=W){
+    const yPlay = timeToY(playPos, H);
+    if(yPlay>=0 && yPlay<=H){
       // halo
       edCtx.strokeStyle = edPlaying ? 'rgba(52,211,153,.9)' : 'rgba(255,212,121,.8)';
       edCtx.lineWidth = edPlaying ? 2.5 : 1.5;
       edCtx.shadowColor = edPlaying ? 'rgba(52,211,153,.5)' : 'transparent';
       edCtx.shadowBlur  = edPlaying ? 8 : 0;
-      edCtx.beginPath(); edCtx.moveTo(xPlay,0); edCtx.lineTo(xPlay,H); edCtx.stroke();
+      edCtx.beginPath(); edCtx.moveTo(0,yPlay); edCtx.lineTo(W,yPlay); edCtx.stroke();
       edCtx.shadowBlur = 0;
-      // triangle indicateur en haut
+      // triangle indicateur à gauche
       edCtx.fillStyle = edPlaying ? 'rgba(52,211,153,.9)' : 'rgba(255,212,121,.8)';
       edCtx.beginPath();
-      edCtx.moveTo(xPlay-7,0); edCtx.lineTo(xPlay+7,0); edCtx.lineTo(xPlay,10);
+      edCtx.moveTo(0,yPlay-7); edCtx.lineTo(0,yPlay+7); edCtx.lineTo(10,yPlay);
       edCtx.closePath(); edCtx.fill();
     }
 
@@ -3275,12 +3319,12 @@ Règles :
       const now = performance.now();
       for(const n of notes){
         if(n._edFlash && now - n._edFlash < 250){
-          const bx = timeToX(n.start, W);
-          const bw = Math.max(4, timeToX(n.start+n.dur, W)-bx);
-          const by = H*(1-(n.midi-minMidi)/(maxMidi-minMidi));
+          const p = edKeyX(n.midi, W);
+          const yBot = timeToY(n.start, H);
+          const yTop = timeToY(n.start+n.dur, H);
           const age = (now-n._edFlash)/250;
           edCtx.fillStyle = 'rgba(255,255,255,'+(0.7*(1-age))+')';
-          roundEdRect(bx,by-6,bw,12,3); edCtx.fill();
+          roundEdRect(p.x, yTop, p.w, Math.max(5,yBot-yTop), 3); edCtx.fill();
         }
       }
     }
