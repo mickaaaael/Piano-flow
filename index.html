@@ -1228,6 +1228,10 @@
       <button id="ledW1" class="led-width-btn">1 LED / touche</button>
       <button id="ledW2" class="led-width-btn">2 LEDs / touche</button>
     </div>
+    <div class="led-width-row">
+      <span>Note suivante en blanc atténué :</span>
+      <button id="ledNextTgl" class="led-width-btn">Désactivé</button>
+    </div>
     <div class="token-status" id="ledStatus"></div>
     <div class="token-btns">
       <button class="btn-skip" id="ledTest">Tester les LEDs</button>
@@ -3935,6 +3939,7 @@ const LedStrip = (()=>{
   const LS_IP  = 'pianoflow_led_ip';
   const LS_CAL = 'pianoflow_led_calibration'; // [{midi, delta}, ...] tries par midi
   const LS_WIDTH = 'pianoflow_led_width';     // 1 ou 2 LEDs par touche
+  const LS_NEXT  = 'pianoflow_led_next';      // apercu de la note suivante (blanc faible)
   let ws = null, ip = null, connected = false, manualOff = false;
   let lit = new Map();      // midi -> couleur envoyee
   let pedalOn = 'off';      // etat pedale actuellement envoye : 'on'|'release'|'off'
@@ -4032,9 +4037,38 @@ const LedStrip = (()=>{
     if(mode === 'practice'){
       const g = currentGroup();
       if(g) for(const n of g) if(!n.hit) d.set(n.midi, n.hand === 'L' ? 'L' : 'R');
+      // apercu : le groupe SUIVANT en blanc attenue
+      if(nextOn && g){
+        const s0 = g[0].start;
+        let ns = null;
+        for(const n of notes){
+          if(n.hit || n.start <= s0 + 0.045) continue;
+          if(practiceHand !== 'both' && n.hand && n.hand !== practiceHand) continue;
+          if(ns === null || n.start < ns) ns = n.start;
+        }
+        if(ns !== null){
+          for(const n of notes){
+            if(n.hit || Math.abs(n.start - ns) > 0.045) continue;
+            if(practiceHand !== 'both' && n.hand && n.hand !== practiceHand) continue;
+            if(!d.has(n.midi)) d.set(n.midi, 'next');
+          }
+        }
+      }
     } else {
       for(const n of notes){
         if(n.start <= t && t < n.start + n.dur) d.set(n.midi, n.hand === 'L' ? 'L' : 'R');
+      }
+      // apercu : la prochaine attaque en blanc attenue
+      if(nextOn){
+        let ns = null;
+        for(const n of notes){
+          if(n.start > t && (ns === null || n.start < ns)) ns = n.start;
+        }
+        if(ns !== null){
+          for(const n of notes){
+            if(Math.abs(n.start - ns) <= 0.045 && !d.has(n.midi)) d.set(n.midi, 'next');
+          }
+        }
       }
     }
     sync(d);
@@ -4081,6 +4115,21 @@ const LedStrip = (()=>{
   wBtn1.addEventListener('click', ()=> setWidth(1));
   wBtn2.addEventListener('click', ()=> setWidth(2));
   applyWidthUI();
+
+  // ---- Apercu de la note suivante ----
+  let nextOn = localStorage.getItem(LS_NEXT) === '1';
+  const nextTgl = document.getElementById('ledNextTgl');
+  function applyNextUI(){
+    nextTgl.classList.toggle('active', nextOn);
+    nextTgl.textContent = nextOn ? 'Activé' : 'Désactivé';
+  }
+  nextTgl.addEventListener('click', ()=>{
+    nextOn = !nextOn;
+    localStorage.setItem(LS_NEXT, nextOn ? '1' : '0');
+    applyNextUI();
+    // si on desactive, les apercus s'eteignent au prochain update()
+  });
+  applyNextUI();
 
   // ---- Modale ----
   pill.addEventListener('click', ()=>{
