@@ -761,6 +761,41 @@
     border-radius:10px; padding:10px 14px; outline:none; transition:border-color .15s;
   }
   .token-row input:focus{ border-color:var(--cyan); }
+
+  /* ---- calibration LED ---- */
+  .cal-note-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:rgba(255,255,255,.05); border:1px solid var(--panel-line);
+    border-radius:12px; padding:10px; margin-bottom:14px;
+  }
+  .cal-note-name{ font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; color:var(--cyan); min-width:70px; text-align:center; }
+  .cal-nav{
+    font-size:12.5px; color:var(--text); background:rgba(255,255,255,.06);
+    border:1px solid var(--panel-line); border-radius:10px; padding:11px 13px; min-height:42px;
+  }
+  .cal-nav:active{ transform:scale(.96); }
+  .cal-actions{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:14px; }
+  .cal-nudge{
+    display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.05);
+    border:1px solid var(--panel-line); border-radius:11px; padding:4px;
+  }
+  .cal-nudge button{
+    font-size:13px; padding:9px 12px; min-height:38px; border:none; background:none; color:var(--text);
+  }
+  .cal-nudge button:active{ transform:scale(.94); }
+  .cal-nudge span{ font-size:12px; color:var(--muted); min-width:88px; text-align:center; font-variant-numeric:tabular-nums; }
+  .cal-points{ max-height:150px; overflow-y:auto; margin-bottom:10px; }
+  .cal-point-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-size:12.5px; color:var(--text); padding:8px 11px; border-radius:9px;
+    background:rgba(255,255,255,.03); margin-bottom:5px;
+  }
+  .cal-point-row button{
+    font-size:12px; color:#fb6f8a; background:none; border:1px solid rgba(251,111,138,.35);
+    border-radius:8px; padding:7px 10px; min-height:34px;
+  }
+  .cal-point-row button:active{ transform:scale(.94); }
+  .cal-empty{ font-size:12.5px; color:var(--muted); text-align:center; padding:10px; }
   .token-row input::placeholder{ color:var(--muted); }
   .token-row .btn-show{
     font-size:16px; background:rgba(255,255,255,.07); border:1px solid var(--panel-line);
@@ -1157,8 +1192,42 @@
     <div class="token-status" id="ledStatus"></div>
     <div class="token-btns">
       <button class="btn-skip" id="ledTest">Tester les LEDs</button>
+      <button class="btn-skip" id="ledCalibrate">🎯 Calibrer</button>
       <button class="btn-skip" id="ledOff">Déconnecter</button>
       <button class="btn-save" id="ledSave">Connecter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Modale de calibration du ruban LED ===== -->
+<div class="token-modal-bg hidden" id="ledCalModalBg">
+  <div class="token-modal" style="max-width:560px">
+    <h3>🎯 Calibrer le ruban LED</h3>
+    <p>
+      Choisis une touche, appuie sur <b>🔆 Tester</b>, puis utilise <b>◀ ▶</b> jusqu'à ce
+      que la LED s'allume pile sur cette touche de ton piano. <b>✓ Valider</b> enregistre
+      ce point. Calibre quelques touches réparties du grave à l'aigu (une par octave par
+      exemple) — les touches entre deux points calibrés sont ajustées automatiquement.
+    </p>
+    <div class="cal-note-row">
+      <button class="cal-nav" id="calPrev">◀ Touche préc.</button>
+      <div class="cal-note-name" id="calNoteName">Do4</div>
+      <button class="cal-nav" id="calNext">Touche suiv. ▶</button>
+    </div>
+    <div class="cal-actions">
+      <button class="btn-skip" id="calTestBtn">🔆 Tester</button>
+      <div class="cal-nudge">
+        <button id="calNudgeM">◀ LED</button>
+        <span id="calDeltaVal">décalage : 0</span>
+        <button id="calNudgeP">LED ▶</button>
+      </div>
+      <button class="btn-save" id="calValidateBtn">✓ Valider ce point</button>
+    </div>
+    <div class="cal-points" id="calPointsList"></div>
+    <div class="token-status" id="calStatus"></div>
+    <div class="token-btns">
+      <button class="btn-skip" id="calResetAll">Réinitialiser toute la calibration</button>
+      <button class="btn-save" id="calCloseBtn">Terminé</button>
     </div>
   </div>
 </div>
@@ -3816,10 +3885,34 @@ const GistSync = (()=>{
    Ruban LED ESP32 (WebSocket, protocole texte)
    ============================================================ */
 const LedStrip = (()=>{
-  const LS_IP = 'pianoflow_led_ip';
+  const LS_IP  = 'pianoflow_led_ip';
+  const LS_CAL = 'pianoflow_led_calibration'; // [{midi, delta}, ...] tries par midi
   let ws = null, ip = null, connected = false, manualOff = false;
   let lit = new Map();      // midi -> couleur envoyee
   let pedalOn = false;      // etat pedale actuellement envoye
+
+  // ---- Calibration : corrige les petits decalages entre les LEDs et les touches ----
+  let calPoints = [];
+  try { calPoints = JSON.parse(localStorage.getItem(LS_CAL) || '[]'); } catch(e){ calPoints = []; }
+  function saveCalPoints(){ localStorage.setItem(LS_CAL, JSON.stringify(calPoints)); }
+  // Note reellement envoyee au ruban pour une touche donnee, en interpolant
+  // le decalage entre les deux points de calibration les plus proches.
+  function calibrate(midi){
+    if(!calPoints.length) return midi;
+    const pts = calPoints; // deja trie par midi
+    if(midi <= pts[0].midi) return clampMidi(midi + pts[0].delta);
+    if(midi >= pts[pts.length-1].midi) return clampMidi(midi + pts[pts.length-1].delta);
+    for(let i=0;i<pts.length-1;i++){
+      const a = pts[i], b = pts[i+1];
+      if(midi >= a.midi && midi <= b.midi){
+        const frac = (b.midi === a.midi) ? 0 : (midi - a.midi) / (b.midi - a.midi);
+        const delta = a.delta + (b.delta - a.delta) * frac;
+        return clampMidi(Math.round(midi + delta));
+      }
+    }
+    return midi;
+  }
+  function clampMidi(m){ return Math.max(21, Math.min(108, m)); }
 
   const pill = document.getElementById('ledPill');
   const txt  = document.getElementById('ledTxt');
@@ -3872,13 +3965,15 @@ const LedStrip = (()=>{
   }
 
   // Envoie uniquement les differences (evite de saturer le WebSocket)
+  // "desired" est deja exprime en notes REELLES ; la calibration est appliquee ici,
+  // au dernier moment, pour que "lit" reste indexe sur les notes reelles.
   function sync(desired){
     if(!connected) return;
     for(const [midi, col] of Array.from(lit)){
-      if(desired.get(midi) !== col){ send('off:' + midi); lit.delete(midi); }
+      if(desired.get(midi) !== col){ send('off:' + calibrate(midi)); lit.delete(midi); }
     }
     for(const [midi, col] of desired){
-      if(lit.get(midi) !== col){ send('on:' + midi + ':' + col); lit.set(midi, col); }
+      if(lit.get(midi) !== col){ send('on:' + calibrate(midi) + ':' + col); lit.set(midi, col); }
     }
   }
 
@@ -3900,9 +3995,9 @@ const LedStrip = (()=>{
   // Flash ponctuel (note juste / fausse)
   function flash(midi, col, ms){
     if(!connected) return;
-    send('on:' + midi + ':' + col);
+    send('on:' + calibrate(midi) + ':' + col);
     lit.set(midi, col);
-    setTimeout(()=>{ if(lit.get(midi) === col){ send('off:' + midi); lit.delete(midi); } }, ms || 250);
+    setTimeout(()=>{ if(lit.get(midi) === col){ send('off:' + calibrate(midi)); lit.delete(midi); } }, ms || 250);
   }
 
   // Pedale : allume les deux extremites du ruban, envoie seulement sur changement d'etat
@@ -3931,8 +4026,8 @@ const LedStrip = (()=>{
     setStatus('Test en cours\u2026', '');
     let m = 21;
     const iv = setInterval(()=>{
-      send('on:' + m + ':' + (m < 60 ? 'L' : 'R'));
-      if(m > 21) send('off:' + (m - 1));
+      send('on:' + calibrate(m) + ':' + (m < 60 ? 'L' : 'R'));
+      if(m > 21) send('off:' + calibrate(m - 1));
       m++;
       if(m > 108){ clearInterval(iv); send('clear'); lit.clear(); setStatus('\u2713 Test termin\u00e9', 'ok'); }
     }, 25);
@@ -3944,6 +4039,109 @@ const LedStrip = (()=>{
     if(saved) connect(saved);
     else setPill('', '\ud83d\udca1 LED');
   }
+
+  // ---- Modale de calibration ----
+  const calBg        = document.getElementById('ledCalModalBg');
+  const calNoteName  = document.getElementById('calNoteName');
+  const calDeltaVal  = document.getElementById('calDeltaVal');
+  const calPointsList= document.getElementById('calPointsList');
+  const calStatusEl  = document.getElementById('calStatus');
+  let calMidi = 60;     // touche en cours de calibration (Do4 par defaut)
+  let calDelta = 0;     // decalage en cours d'essai pour cette touche
+  let calLastLit = null;    // note reelle actuellement testee (pour l'eteindre)
+  let calLastSent = null;   // note virtuelle effectivement envoyee (pour l'eteindre)
+
+  function calSetStatus(msg, type){
+    calStatusEl.className = 'token-status' + (type ? ' '+type : '');
+    calStatusEl.textContent = msg || '';
+  }
+  function calNoteLabel(m){
+    return NOTE_NAMES_FR[m%12] + Math.floor(m/12-1);
+  }
+  function calExistingDelta(m){
+    const p = calPoints.find(p=>p.midi===m);
+    return p ? p.delta : 0;
+  }
+  function calRefreshNote(){
+    calNoteName.textContent = calNoteLabel(calMidi);
+    calDelta = calExistingDelta(calMidi);
+    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta;
+    calSetStatus('');
+    // eteint la derniere LED de test si on change de touche sans valider
+    if(calLastSent !== null){ send('off:' + calLastSent); calLastLit = null; calLastSent = null; }
+  }
+  function calRenderList(){
+    if(!calPoints.length){
+      calPointsList.innerHTML = '<div class="cal-empty">Aucun point calibré pour l’instant — le ruban suit les notes telles quelles.</div>';
+      return;
+    }
+    calPointsList.innerHTML = calPoints.map(p=>
+      '<div class="cal-point-row"><span>' + calNoteLabel(p.midi) + ' → décalage ' + (p.delta>0?'+':'') + p.delta +
+      '</span><button data-midi="' + p.midi + '">✕ Retirer</button></div>'
+    ).join('');
+    calPointsList.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const m = parseInt(b.dataset.midi, 10);
+        calPoints = calPoints.filter(p=>p.midi !== m);
+        saveCalPoints();
+        calRenderList();
+        if(m === calMidi) calRefreshNote();
+      });
+    });
+  }
+  function calTestLight(){
+    if(!connected){ calSetStatus('Connecte-toi d\u2019abord au ruban', 'err'); return; }
+    if(calLastSent !== null) send('off:' + calLastSent);
+    const virtualMidi = clampMidi(calMidi + calDelta);
+    send('on:' + virtualMidi + ':R');
+    calLastLit = calMidi; calLastSent = virtualMidi;
+    calSetStatus('LED allumée — compare avec la touche ' + calNoteLabel(calMidi), '');
+  }
+
+  document.getElementById('ledCalibrate').addEventListener('click', ()=>{
+    modalBg.classList.add('hidden');
+    calRefreshNote();
+    calRenderList();
+    calBg.classList.remove('hidden');
+  });
+  document.getElementById('calCloseBtn').addEventListener('click', ()=>{
+    if(calLastSent !== null){ send('off:' + calLastSent); calLastLit = null; calLastSent = null; }
+    calBg.classList.add('hidden');
+  });
+  calBg.addEventListener('click', e=>{ if(e.target === calBg) document.getElementById('calCloseBtn').click(); });
+
+  document.getElementById('calPrev').addEventListener('click', ()=>{
+    calMidi = Math.max(21, calMidi - 1); calRefreshNote();
+  });
+  document.getElementById('calNext').addEventListener('click', ()=>{
+    calMidi = Math.min(108, calMidi + 1); calRefreshNote();
+  });
+  document.getElementById('calTestBtn').addEventListener('click', calTestLight);
+  document.getElementById('calNudgeM').addEventListener('click', ()=>{
+    calDelta -= 1;
+    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta;
+    if(calLastLit !== null) calTestLight();
+  });
+  document.getElementById('calNudgeP').addEventListener('click', ()=>{
+    calDelta += 1;
+    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta;
+    if(calLastLit !== null) calTestLight();
+  });
+  document.getElementById('calValidateBtn').addEventListener('click', ()=>{
+    calPoints = calPoints.filter(p=>p.midi !== calMidi);
+    if(calDelta !== 0) calPoints.push({ midi: calMidi, delta: calDelta });
+    calPoints.sort((a,b)=>a.midi-b.midi);
+    saveCalPoints();
+    calRenderList();
+    calSetStatus('✓ Point enregistré pour ' + calNoteLabel(calMidi), 'ok');
+  });
+  document.getElementById('calResetAll').addEventListener('click', ()=>{
+    calPoints = [];
+    saveCalPoints();
+    calRenderList();
+    calRefreshNote();
+    calSetStatus('Calibration réinitialisée', 'ok');
+  });
 
   return { init, update, flash, pedal, get connected(){ return connected; } };
 })();
