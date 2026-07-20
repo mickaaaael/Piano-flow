@@ -2143,7 +2143,6 @@ function render(){
   if(pedalEvents.length){
     const pedalEl = document.getElementById('pedalNow');
     const pedalActive = pedalEvents.some(p=> t>=p.start && t<p.end);
-    LedStrip.pedal(pedalActive);
 
     // Cherche si une transition est imminente (dans les 1.5s à venir)
     const AHEAD = 1.5; // secondes d'anticipation
@@ -2153,6 +2152,12 @@ function render(){
       if(p.end>t && p.end<=t+AHEAD && !pedalActive && nextRelease===null) nextRelease=p.end;
       if(pedalActive && p.end>t && p.end<=t+AHEAD && nextRelease===null) nextRelease=p.end;
     }
+
+    // Ruban LED : même logique que le bandeau — le rouge s'allume AVANT le
+    // relâchement, même si la pédale doit être ré-enfoncée juste après
+    // (événements bord à bord dans les passages legato)
+    const relSoon = pedalActive && nextRelease !== null && (nextRelease - t) < 0.8;
+    LedStrip.pedal(pedalActive ? (relSoon ? 'release' : 'on') : 'off');
 
     // Affichage : priorité à ce qui se passe maintenant
     if(pedalActive){
@@ -3932,7 +3937,7 @@ const LedStrip = (()=>{
   const LS_WIDTH = 'pianoflow_led_width';     // 1 ou 2 LEDs par touche
   let ws = null, ip = null, connected = false, manualOff = false;
   let lit = new Map();      // midi -> couleur envoyee
-  let pedalOn = false;      // etat pedale actuellement envoye
+  let pedalOn = 'off';      // etat pedale actuellement envoye : 'on'|'release'|'off'
 
   // ---- Calibration : corrige les petits decalages entre les LEDs et les touches ----
   let calPoints = [];
@@ -3984,7 +3989,7 @@ const LedStrip = (()=>{
       localStorage.setItem(LS_IP, ip);
       setPill('on', '\ud83d\udca1 LED actif');
       setStatus('\u2713 Connect\u00e9 \u00e0 ' + ip, 'ok');
-      lit.clear(); pedalOn = false; send('clear');
+      lit.clear(); pedalOn = 'off'; send('clear');
       send('width:' + ledWidth);   // applique la largeur choisie
     };
     ws.onclose = ()=>{
@@ -4044,23 +4049,13 @@ const LedStrip = (()=>{
   }
 
   // Pedale : allume les deux extremites du ruban, envoie seulement sur changement d'etat
-  let pedalOffTimer = null;
-  function pedal(active){
+  function pedal(state){
+    // 'on' (vert : appuie) | 'release' (rouge : relache bientot) | 'off' (eteint)
     if(!connected) return;
-    if(active === pedalOn) return;
-    pedalOn = active;
-    if(active){
-      // vert : appuie (maintenu tant que la pedale doit rester enfoncee)
-      if(pedalOffTimer){ clearTimeout(pedalOffTimer); pedalOffTimer = null; }
-      send('pedal:on');
-    } else {
-      // rouge : relache maintenant, puis extinction apres ~1 s
-      send('pedal:release');
-      pedalOffTimer = setTimeout(()=>{
-        pedalOffTimer = null;
-        if(!pedalOn && connected) send('pedal:off');
-      }, 1000);
-    }
+    if(typeof state === 'boolean') state = state ? 'on' : 'off'; // retrocompat
+    if(state === pedalOn) return;
+    pedalOn = state;
+    send('pedal:' + state);
   }
 
   // ---- Largeur d'allumage (1 ou 2 LEDs par touche) ----
