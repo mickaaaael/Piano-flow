@@ -762,6 +762,21 @@
   }
   .token-row input:focus{ border-color:var(--cyan); }
 
+  /* ---- largeur d'allumage LED ---- */
+  .led-width-row{
+    display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:12px;
+  }
+  .led-width-row span{ font-size:12.5px; color:var(--muted); }
+  .led-width-btn{
+    font-size:12.5px; color:var(--muted); background:rgba(255,255,255,.05);
+    border:1px solid var(--panel-line); border-radius:10px; padding:10px 14px; min-height:42px;
+  }
+  .led-width-btn.active{
+    color:var(--cyan); border-color:rgba(95,227,242,.55);
+    background:rgba(95,227,242,.1); font-weight:600;
+  }
+  .led-width-btn:active{ transform:scale(.96); }
+
   /* ---- calibration LED ---- */
   .cal-note-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
@@ -1188,6 +1203,11 @@
     </p>
     <div class="token-row">
       <input type="text" id="ledIpInput" placeholder="192.168.1.28" autocomplete="off" />
+    </div>
+    <div class="led-width-row">
+      <span>Largeur d'allumage :</span>
+      <button id="ledW1" class="led-width-btn">1 LED / touche</button>
+      <button id="ledW2" class="led-width-btn">2 LEDs / touche</button>
     </div>
     <div class="token-status" id="ledStatus"></div>
     <div class="token-btns">
@@ -3887,6 +3907,7 @@ const GistSync = (()=>{
 const LedStrip = (()=>{
   const LS_IP  = 'pianoflow_led_ip';
   const LS_CAL = 'pianoflow_led_calibration'; // [{midi, delta}, ...] tries par midi
+  const LS_WIDTH = 'pianoflow_led_width';     // 1 ou 2 LEDs par touche
   let ws = null, ip = null, connected = false, manualOff = false;
   let lit = new Map();      // midi -> couleur envoyee
   let pedalOn = false;      // etat pedale actuellement envoye
@@ -3943,6 +3964,7 @@ const LedStrip = (()=>{
       setPill('on', '\ud83d\udca1 LED actif');
       setStatus('\u2713 Connect\u00e9 \u00e0 ' + ip, 'ok');
       lit.clear(); pedalOn = false; send('clear');
+      send('width:' + ledWidth);   // applique la largeur choisie
     };
     ws.onclose = ()=>{
       connected = false;
@@ -4007,6 +4029,30 @@ const LedStrip = (()=>{
     pedalOn = active;
     send(active ? 'pedal:on' : 'pedal:off');
   }
+
+  // ---- Largeur d'allumage (1 ou 2 LEDs par touche) ----
+  let ledWidth = parseInt(localStorage.getItem(LS_WIDTH) || '2', 10) === 1 ? 1 : 2;
+  const wBtn1 = document.getElementById('ledW1');
+  const wBtn2 = document.getElementById('ledW2');
+  function applyWidthUI(){
+    wBtn1.classList.toggle('active', ledWidth === 1);
+    wBtn2.classList.toggle('active', ledWidth === 2);
+  }
+  function setWidth(w){
+    ledWidth = w;
+    localStorage.setItem(LS_WIDTH, String(w));
+    applyWidthUI();
+    if(connected){
+      send('width:' + w);   // le firmware fait un clear, on vide notre etat
+      lit.clear();          // pour que update() renvoie les notes en cours
+      setStatus('\u2713 Largeur : ' + w + ' LED' + (w>1?'s':'') + ' par touche', 'ok');
+    } else {
+      setStatus('Largeur m\u00e9moris\u00e9e \u2014 sera appliqu\u00e9e \u00e0 la connexion', '');
+    }
+  }
+  wBtn1.addEventListener('click', ()=> setWidth(1));
+  wBtn2.addEventListener('click', ()=> setWidth(2));
+  applyWidthUI();
 
   // ---- Modale ----
   pill.addEventListener('click', ()=>{
