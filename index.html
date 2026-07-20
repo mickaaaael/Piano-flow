@@ -48,6 +48,48 @@
   .brand{ display:flex; align-items:baseline; gap:10px; margin-right:auto; }
   .menu-btn{ font-size:19px; padding:10px 15px; min-width:48px; }
 
+  /* ---- barre d'enregistrement ---- */
+  .rec-bar{
+    position:fixed; top:66px; left:50%; transform:translateX(-50%);
+    z-index:65; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:rgba(12,9,24,.96); border:1px solid rgba(251,111,138,.45);
+    border-radius:16px; padding:11px 16px; max-width:94vw;
+    box-shadow:0 10px 40px rgba(0,0,0,.5);
+  }
+  .rec-dot{
+    width:13px; height:13px; border-radius:50%; background:#fb2b4e;
+    animation:recPulse 1.1s ease infinite;
+  }
+  @keyframes recPulse{ 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.35; transform:scale(.75);} }
+  .rec-bar.saving .rec-dot{ animation:none; background:#34d399; }
+  .rec-status{ font-size:13px; color:var(--text); }
+  .rec-timer{ font-size:13px; color:var(--cyan); font-variant-numeric:tabular-nums; }
+  .rec-count{ font-size:12px; color:var(--muted); }
+  .rec-stop{
+    font-size:13px; font-weight:600; color:#fff;
+    background:rgba(251,111,138,.25); border:1px solid rgba(251,111,138,.6);
+    border-radius:11px; padding:10px 15px; min-height:42px;
+  }
+  .rec-stop:active{ transform:scale(.96); }
+  .rec-save-row{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .rec-save-row input{
+    font-size:13px; color:var(--text); background:rgba(255,255,255,.07);
+    border:1px solid var(--panel-line); border-radius:10px; padding:10px 12px;
+    min-height:42px; width:210px; outline:none;
+  }
+  .rec-save-row input:focus{ border-color:var(--cyan); }
+  .rec-save{
+    font-size:13px; font-weight:600; color:#08130e;
+    background:linear-gradient(90deg,#34d399,#10b981); border:none;
+    border-radius:11px; padding:10px 16px; min-height:42px;
+  }
+  .rec-discard{
+    font-size:13px; color:var(--muted); background:none;
+    border:1px solid var(--panel-line); border-radius:11px;
+    padding:10px 13px; min-height:42px;
+  }
+  .rec-save:active,.rec-discard:active{ transform:scale(.96); }
+
   /* ---- menu latéral ---- */
   .side-menu-bg{
     position:fixed; inset:0; z-index:70; background:rgba(6,5,14,.65);
@@ -945,6 +987,20 @@
     </div>
   </header>
 
+  <!-- ===== BARRE D'ENREGISTREMENT ===== -->
+  <div class="rec-bar hidden" id="recBar">
+    <span class="rec-dot" id="recDot"></span>
+    <span class="rec-status" id="recStatus">Joue ta première note…</span>
+    <span class="rec-timer" id="recTimer">0:00</span>
+    <span class="rec-count" id="recCount"></span>
+    <button class="rec-stop" id="recStopBtn">⏹ Terminer</button>
+    <span class="rec-save-row hidden" id="recSaveRow">
+      <input type="text" id="recNameInput" placeholder="Nom du morceau" maxlength="60" />
+      <button class="rec-save" id="recSaveBtn">💾 Sauvegarder</button>
+      <button class="rec-discard" id="recDiscardBtn">✕ Jeter</button>
+    </span>
+  </div>
+
   <!-- ===== MENU LATÉRAL ===== -->
   <div class="side-menu-bg" id="sideMenuBg"></div>
   <nav class="side-menu" id="sideMenu">
@@ -966,6 +1022,9 @@
       <span id="progressTxt">🎓 Progression</span>
     </div>
     <div class="sm-section">Outils</div>
+    <button id="recBtn" class="file" title="Enregistre ce que tu joues sur ton piano pour en faire un morceau">
+      <span>⏺</span> Enregistrer un morceau
+    </button>
     <label class="file" tabindex="0" title="Charger un fichier .mid" style="display:none">
       <span>📁</span> Fichier MIDI
       <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
@@ -1866,6 +1925,7 @@ function onDown(midi){
   if(pressed.has(midi))return;
   pressed.add(midi);
   const k=keyByMidi.get(midi); if(k)k.el.classList.add('pressed');
+  if(Rec.active) Rec.noteOn(midi);
   if(mode==='practice'){
     const g=currentGroup();
     const target=g&&g.find(n=>!n.hit&&n.midi===midi);
@@ -1893,7 +1953,135 @@ function onDown(midi){
 function onUp(midi){
   pressed.delete(midi);
   const k=keyByMidi.get(midi); if(k)k.el.classList.remove('pressed');
+  if(Rec.active) Rec.noteOff(midi);
 }
+
+/* ============================================================
+   ENREGISTREMENT — joue sur ton piano, l'appli capture tout
+   ============================================================ */
+const Rec = (()=>{
+  let active = false, t0 = null;
+  let held = new Map();        // midi -> temps d'appui
+  let recNotes = [], recPedal = [], pedalDownAt = null;
+  let timerIv = null;
+
+  const bar     = document.getElementById('recBar');
+  const status  = document.getElementById('recStatus');
+  const timerEl = document.getElementById('recTimer');
+  const countEl = document.getElementById('recCount');
+  const stopBtn = document.getElementById('recStopBtn');
+  const saveRow = document.getElementById('recSaveRow');
+  const nameInp = document.getElementById('recNameInput');
+
+  const now = ()=> performance.now() / 1000;
+
+  function fmtTime(s){
+    const m = Math.floor(s/60), sec = Math.floor(s%60);
+    return m + ':' + String(sec).padStart(2,'0');
+  }
+  function tick(){
+    if(t0 !== null) timerEl.textContent = fmtTime(now() - t0);
+  }
+  function updateCount(){
+    const n = recNotes.length + held.size;
+    countEl.textContent = n ? (n + ' note' + (n>1?'s':'')) : '';
+  }
+
+  function start(){
+    if(active) return;
+    pauseFn();
+    if(mode === 'practice') document.getElementById('modeBtn').click(); // repasse en écoute
+    active = true; t0 = null;
+    held.clear(); recNotes = []; recPedal = []; pedalDownAt = null;
+    bar.classList.remove('hidden','saving');
+    saveRow.classList.add('hidden');
+    status.classList.remove('hidden'); timerEl.classList.remove('hidden');
+    countEl.classList.remove('hidden'); stopBtn.classList.remove('hidden');
+    status.textContent = 'Joue ta première note…';
+    timerEl.textContent = '0:00'; countEl.textContent = '';
+    timerIv = setInterval(tick, 250);
+  }
+
+  function noteOn(m){
+    if(!active) return;
+    const tn = now();
+    if(t0 === null){ t0 = tn - 0.3; status.textContent = '⏺ Enregistrement…'; }
+    held.set(m, tn);
+    updateCount();
+  }
+  function noteOff(m){
+    if(!active) return;
+    const s = held.get(m);
+    if(s === undefined) return;
+    held.delete(m);
+    if(t0 === null) return;
+    recNotes.push({
+      midi: m,
+      start: Math.max(0, s - t0),
+      dur: Math.max(0.15, now() - s),
+      hand: m < 60 ? 'L' : 'R'
+    });
+    updateCount();
+  }
+  function pedalCC(down){
+    if(!active || t0 === null) return;
+    if(down && pedalDownAt === null) pedalDownAt = now();
+    else if(!down && pedalDownAt !== null){
+      recPedal.push({ start: Math.max(0, pedalDownAt - t0), end: now() - t0 });
+      pedalDownAt = null;
+    }
+  }
+
+  function stop(){
+    if(!active) return;
+    active = false;
+    clearInterval(timerIv); timerIv = null;
+    const tn = now();
+    // referme les notes encore tenues et la pédale
+    if(t0 !== null){
+      for(const [m, s] of held){
+        recNotes.push({ midi:m, start:Math.max(0,s-t0), dur:Math.max(0.15,tn-s), hand: m<60?'L':'R' });
+      }
+      if(pedalDownAt !== null){ recPedal.push({ start:Math.max(0,pedalDownAt-t0), end:tn-t0 }); pedalDownAt = null; }
+    }
+    held.clear();
+    if(!recNotes.length){ bar.classList.add('hidden'); return; }
+    recNotes.sort((a,b)=>a.start-b.start);
+    // bascule la barre en mode sauvegarde
+    bar.classList.add('saving');
+    status.classList.add('hidden'); timerEl.classList.add('hidden');
+    countEl.textContent = recNotes.length + ' note' + (recNotes.length>1?'s':'') + ' enregistrée' + (recNotes.length>1?'s':'');
+    stopBtn.classList.add('hidden');
+    saveRow.classList.remove('hidden');
+    const d = new Date();
+    nameInp.value = 'Enregistrement du ' + String(d.getDate()).padStart(2,'0') + '/' +
+      String(d.getMonth()+1).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' +
+      String(d.getMinutes()).padStart(2,'0');
+  }
+
+  function save(){
+    const name = nameInp.value.trim() || 'Enregistrement';
+    const key = 'rec_' + Date.now().toString(36);
+    const parsed = { notes: recNotes, pedal: recPedal, hasHands: true };
+    GistSync.saveSong(key, name, parsed);
+    GistSync.addSongToSelect(key, name);
+    SONGS[key] = { name, ...parsed, savedAt: Date.now() };
+    bar.classList.add('hidden');
+    startWithSong(key);   // charge directement l'enregistrement pour le réécouter
+  }
+  function discard(){ recNotes = []; bar.classList.add('hidden'); }
+
+  stopBtn.addEventListener('click', stop);
+  document.getElementById('recSaveBtn').addEventListener('click', save);
+  document.getElementById('recDiscardBtn').addEventListener('click', discard);
+  document.getElementById('recBtn').addEventListener('click', ()=>{
+    document.getElementById('sideMenu').classList.remove('open');
+    document.getElementById('sideMenuBg').classList.remove('open');
+    start();
+  });
+
+  return { start, noteOn, noteOff, pedalCC, get active(){ return active; } };
+})();
 
 /* Web MIDI */
 const pill=document.getElementById('midiPill'),pillTxt=document.getElementById('midiTxt');
@@ -1915,6 +2103,7 @@ function onMIDI(e){
   Audio.resume();
   if(cmd===0x90&&d2>0)onDown(d1);
   else if(cmd===0x80||(cmd===0x90&&d2===0))onUp(d1);
+  else if(cmd===0xB0&&d1===64&&Rec.active)Rec.pedalCC(d2>=64); // pédale (enregistrement)
 }
 
 /* Clavier ordi */
