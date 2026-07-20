@@ -811,6 +811,25 @@
   }
   .cal-point-row button:active{ transform:scale(.94); }
   .cal-empty{ font-size:12.5px; color:var(--muted); text-align:center; padding:10px; }
+  .cal-kbd{
+    position:relative; height:80px; margin-bottom:8px;
+    border-radius:8px; overflow:hidden; background:#0a0816;
+    touch-action:manipulation; user-select:none; -webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .cal-key{ position:absolute; top:0; box-sizing:border-box; cursor:pointer; }
+  .cal-key.white{
+    height:100%; background:#e8e6f0; border:1px solid #0a0816;
+    border-radius:0 0 3px 3px;
+  }
+  .cal-key.black{
+    height:60%; background:#14101f; border:1px solid #000;
+    z-index:2; border-radius:0 0 3px 3px;
+  }
+  .cal-key.white.done{ background:#34d399; }
+  .cal-key.black.done{ background:#0f8a63; }
+  .cal-key.current{ outline:3px solid var(--cyan); outline-offset:-3px; z-index:3; }
+  .cal-progress{ font-size:12px; color:var(--muted); text-align:right; margin-bottom:12px; }
   .token-row input::placeholder{ color:var(--muted); }
   .token-row .btn-show{
     font-size:16px; background:rgba(255,255,255,.07); border:1px solid var(--panel-line);
@@ -1221,14 +1240,17 @@
 
 <!-- ===== Modale de calibration du ruban LED ===== -->
 <div class="token-modal-bg hidden" id="ledCalModalBg">
-  <div class="token-modal" style="max-width:560px">
+  <div class="token-modal" style="max-width:820px">
     <h3>🎯 Calibrer le ruban LED</h3>
     <p>
-      Choisis une touche, appuie sur <b>🔆 Tester</b>, puis utilise <b>◀ ▶</b> jusqu'à ce
-      que la LED s'allume pile sur cette touche de ton piano. <b>✓ Valider</b> enregistre
-      ce point. Calibre quelques touches réparties du grave à l'aigu (une par octave par
-      exemple) — les touches entre deux points calibrés sont ajustées automatiquement.
+      La LED de la touche affichée s'allume automatiquement : compare avec ton piano,
+      ajuste avec <b>◀ LED / LED ▶</b> puis <b>✓ Valider</b> — la touche suivante
+      s'enchaîne toute seule. Sur le piano ci-dessous : <b style="color:#34d399">vert</b> =
+      calibrée, <b style="color:var(--cyan)">cyan</b> = en cours. Tape une touche pour y sauter.
+      Les touches non calibrées sont ajustées par interpolation entre les points voisins.
     </p>
+    <div class="cal-kbd" id="calKbd"></div>
+    <div class="cal-progress" id="calProgress"></div>
     <div class="cal-note-row">
       <button class="cal-nav" id="calPrev">◀ Touche préc.</button>
       <div class="cal-note-name" id="calNoteName">Do4</div>
@@ -4106,8 +4128,60 @@ const LedStrip = (()=>{
   }
   function calExistingDelta(m){
     const p = calPoints.find(p=>p.midi===m);
-    return p ? p.delta : 0;
+    // touche deja calibree : son decalage exact ;
+    // sinon : la valeur interpolee (souvent deja bonne, il n'y a qu'a valider)
+    return p ? p.delta : calOffset(m);
   }
+  function calIsBlack(m){ const pc = m % 12; return pc===1||pc===3||pc===6||pc===8||pc===10; }
+
+  // ---- Piano virtuel de la calibration ----
+  let calKbdBuilt = false;
+  function calBuildKbd(){
+    if(calKbdBuilt) return;
+    calKbdBuilt = true;
+    const kbd = document.getElementById('calKbd');
+    const whites = [];
+    for(let m=21; m<=108; m++) if(!calIsBlack(m)) whites.push(m);
+    const ww = 100 / whites.length;
+    whites.forEach((m,i)=>{
+      const el = document.createElement('div');
+      el.className = 'cal-key white';
+      el.style.left = (i*ww) + '%';
+      el.style.width = ww + '%';
+      el.dataset.midi = m;
+      el.title = calNoteLabel(m);
+      kbd.appendChild(el);
+    });
+    let wi = 0;
+    for(let m=21; m<=108; m++){
+      if(!calIsBlack(m)){ wi++; continue; }
+      const el = document.createElement('div');
+      el.className = 'cal-key black';
+      el.style.left = (wi*ww - ww*0.32) + '%';
+      el.style.width = (ww*0.64) + '%';
+      el.dataset.midi = m;
+      el.title = calNoteLabel(m);
+      kbd.appendChild(el);
+    }
+    kbd.querySelectorAll('.cal-key').forEach(k=>{
+      k.addEventListener('click', ()=>{
+        calMidi = parseInt(k.dataset.midi, 10);
+        calRefreshNote();
+      });
+    });
+  }
+  function calUpdateKbd(){
+    const kbd = document.getElementById('calKbd');
+    const doneSet = new Set(calPoints.map(p=>p.midi));
+    kbd.querySelectorAll('.cal-key').forEach(k=>{
+      const m = parseInt(k.dataset.midi, 10);
+      k.classList.toggle('done', doneSet.has(m));
+      k.classList.toggle('current', m === calMidi);
+    });
+    document.getElementById('calProgress').textContent =
+      calPoints.length + ' / 88 touches calibrées';
+  }
+
   function calRefreshNote(){
     calNoteName.textContent = calNoteLabel(calMidi);
     calDelta = calExistingDelta(calMidi);
@@ -4115,6 +4189,9 @@ const LedStrip = (()=>{
     calSetStatus('');
     // eteint la derniere LED de test si on change de touche sans valider
     if(calLastSent !== null){ send('off:' + calLastSent); calLastLit = null; calLastSent = null; }
+    calUpdateKbd();
+    // allume automatiquement la LED de la touche courante
+    if(connected && !calBg.classList.contains('hidden')) calTestLight();
   }
   function calRenderList(){
     if(!calPoints.length){
@@ -4131,6 +4208,7 @@ const LedStrip = (()=>{
         calPoints = calPoints.filter(p=>p.midi !== m);
         saveCalPoints();
         calRenderList();
+        calUpdateKbd();
         if(m === calMidi) calRefreshNote();
       });
     });
@@ -4146,9 +4224,10 @@ const LedStrip = (()=>{
 
   document.getElementById('ledCalibrate').addEventListener('click', ()=>{
     modalBg.classList.add('hidden');
+    calBuildKbd();
+    calBg.classList.remove('hidden');
     calRefreshNote();
     calRenderList();
-    calBg.classList.remove('hidden');
   });
   document.getElementById('calCloseBtn').addEventListener('click', ()=>{
     if(calLastSent !== null){ send('off:' + calLastSent); calLastLit = null; calLastSent = null; }
@@ -4174,18 +4253,29 @@ const LedStrip = (()=>{
     if(calLastLit !== null) calTestLight();
   });
   document.getElementById('calValidateBtn').addEventListener('click', ()=>{
+    const savedLabel = calNoteLabel(calMidi);
     calPoints = calPoints.filter(p=>p.midi !== calMidi);
-    if(calDelta !== 0) calPoints.push({ midi: calMidi, delta: calDelta });
+    // decalage 0 aussi enregistre : la touche compte comme calibree
+    calPoints.push({ midi: calMidi, delta: calDelta });
     calPoints.sort((a,b)=>a.midi-b.midi);
     saveCalPoints();
     calRenderList();
-    calSetStatus('✓ Point enregistré pour ' + calNoteLabel(calMidi), 'ok');
+    // enchaine sur la touche suivante (s'il en reste une)
+    if(calMidi < 108){
+      calMidi += 1;
+      calRefreshNote();
+      calSetStatus('✓ ' + savedLabel + ' enregistré — au tour de ' + calNoteLabel(calMidi), 'ok');
+    } else {
+      calUpdateKbd();
+      calSetStatus('✓ ' + savedLabel + ' enregistré — clavier terminé !', 'ok');
+    }
   });
   document.getElementById('calResetAll').addEventListener('click', ()=>{
     calPoints = [];
     saveCalPoints();
     calRenderList();
     calRefreshNote();
+    calUpdateKbd();
     calSetStatus('Calibration réinitialisée', 'ok');
   });
 
