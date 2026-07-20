@@ -4055,8 +4055,9 @@ const LedStrip = (()=>{
     calStatusEl.className = 'token-status' + (type ? ' '+type : '');
     calStatusEl.textContent = msg || '';
   }
+  const CAL_NOTE_NAMES = ['Do','Do#','Ré','Ré#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
   function calNoteLabel(m){
-    return NOTE_NAMES_FR[m%12] + Math.floor(m/12-1);
+    return CAL_NOTE_NAMES[m%12] + Math.floor(m/12-1);
   }
   function calExistingDelta(m){
     const p = calPoints.find(p=>p.midi===m);
