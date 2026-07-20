@@ -2203,6 +2203,7 @@ function showNameDialog(defaultName, onConfirm){
 document.getElementById('songSelect').addEventListener('change',e=>{
   const s=SONGS[e.target.value];
   currentSongKey=e.target.value;
+  localStorage.setItem('pianoflow_last_song', currentSongKey);
   loadNotes(s, s.name);
   pauseFn();
 });
@@ -3961,8 +3962,11 @@ const urlEdit = urlParams.get('edit') === '1';
 
 function startWithSong(key){
   currentSongKey = key;
+  localStorage.setItem('pianoflow_last_song', key);
   const s = SONGS[key];
   loadNotes(s, s.name);
+  const sel = document.getElementById('songSelect');
+  if(sel && sel.querySelector('option[value="'+key+'"]')) sel.value = key;
   if(key === urlSongKey){
     if(urlEdit){
       // Arrivée depuis "Modifier" sur la Bibliothèque : ouvre directement l'éditeur
@@ -3977,6 +3981,8 @@ function startWithSong(key){
   }
 }
 
+// Sans paramètre d'URL, on reprend le dernier morceau joué
+const lastKey = localStorage.getItem('pianoflow_last_song');
 if(urlSongKey && SONGS[urlSongKey]){
   startWithSong(urlSongKey);
 } else if(urlSongKey){
@@ -3984,6 +3990,12 @@ if(urlSongKey && SONGS[urlSongKey]){
   // on démarre sur le morceau par défaut et on bascule dès qu'il arrive
   startWithSong('ode');
   restorePromise.then(()=>{ if(SONGS[urlSongKey]) startWithSong(urlSongKey); });
+} else if(lastKey && SONGS[lastKey]){
+  startWithSong(lastKey);
+} else if(lastKey){
+  // dernier morceau perso pas encore synchronisé : bascule dès qu'il arrive
+  startWithSong('ode');
+  restorePromise.then(()=>{ if(SONGS[lastKey]) startWithSong(lastKey); });
 } else {
   startWithSong('ode');
 }
