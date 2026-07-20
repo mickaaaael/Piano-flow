@@ -4044,11 +4044,23 @@ const LedStrip = (()=>{
   }
 
   // Pedale : allume les deux extremites du ruban, envoie seulement sur changement d'etat
+  let pedalOffTimer = null;
   function pedal(active){
     if(!connected) return;
     if(active === pedalOn) return;
     pedalOn = active;
-    send(active ? 'pedal:on' : 'pedal:off');
+    if(active){
+      // vert : appuie (maintenu tant que la pedale doit rester enfoncee)
+      if(pedalOffTimer){ clearTimeout(pedalOffTimer); pedalOffTimer = null; }
+      send('pedal:on');
+    } else {
+      // rouge : relache maintenant, puis extinction apres ~1 s
+      send('pedal:release');
+      pedalOffTimer = setTimeout(()=>{
+        pedalOffTimer = null;
+        if(!pedalOn && connected) send('pedal:off');
+      }, 1000);
+    }
   }
 
   // ---- Largeur d'allumage (1 ou 2 LEDs par touche) ----
