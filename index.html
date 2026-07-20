@@ -3916,24 +3916,23 @@ const LedStrip = (()=>{
   let calPoints = [];
   try { calPoints = JSON.parse(localStorage.getItem(LS_CAL) || '[]'); } catch(e){ calPoints = []; }
   function saveCalPoints(){ localStorage.setItem(LS_CAL, JSON.stringify(calPoints)); }
-  // Note reellement envoyee au ruban pour une touche donnee, en interpolant
-  // le decalage entre les deux points de calibration les plus proches.
-  function calibrate(midi){
-    if(!calPoints.length) return midi;
+  // Decalage en LEDs PHYSIQUES a appliquer pour une touche donnee,
+  // en interpolant entre les deux points de calibration les plus proches.
+  // L'offset est envoye au firmware qui decale l'index de LED (pas la note).
+  function calOffset(midi){
+    if(!calPoints.length) return 0;
     const pts = calPoints; // deja trie par midi
-    if(midi <= pts[0].midi) return clampMidi(midi + pts[0].delta);
-    if(midi >= pts[pts.length-1].midi) return clampMidi(midi + pts[pts.length-1].delta);
+    if(midi <= pts[0].midi) return pts[0].delta;
+    if(midi >= pts[pts.length-1].midi) return pts[pts.length-1].delta;
     for(let i=0;i<pts.length-1;i++){
       const a = pts[i], b = pts[i+1];
       if(midi >= a.midi && midi <= b.midi){
         const frac = (b.midi === a.midi) ? 0 : (midi - a.midi) / (b.midi - a.midi);
-        const delta = a.delta + (b.delta - a.delta) * frac;
-        return clampMidi(Math.round(midi + delta));
+        return Math.round(a.delta + (b.delta - a.delta) * frac);
       }
     }
-    return midi;
+    return 0;
   }
-  function clampMidi(m){ return Math.max(21, Math.min(108, m)); }
 
   const pill = document.getElementById('ledPill');
   const txt  = document.getElementById('ledTxt');
@@ -3992,10 +3991,10 @@ const LedStrip = (()=>{
   function sync(desired){
     if(!connected) return;
     for(const [midi, col] of Array.from(lit)){
-      if(desired.get(midi) !== col){ send('off:' + calibrate(midi)); lit.delete(midi); }
+      if(desired.get(midi) !== col){ send('off:' + midi + ':' + calOffset(midi)); lit.delete(midi); }
     }
     for(const [midi, col] of desired){
-      if(lit.get(midi) !== col){ send('on:' + calibrate(midi) + ':' + col); lit.set(midi, col); }
+      if(lit.get(midi) !== col){ send('on:' + midi + ':' + col + ':' + calOffset(midi)); lit.set(midi, col); }
     }
   }
 
@@ -4017,9 +4016,9 @@ const LedStrip = (()=>{
   // Flash ponctuel (note juste / fausse)
   function flash(midi, col, ms){
     if(!connected) return;
-    send('on:' + calibrate(midi) + ':' + col);
+    send('on:' + midi + ':' + col + ':' + calOffset(midi));
     lit.set(midi, col);
-    setTimeout(()=>{ if(lit.get(midi) === col){ send('off:' + calibrate(midi)); lit.delete(midi); } }, ms || 250);
+    setTimeout(()=>{ if(lit.get(midi) === col){ send('off:' + midi + ':' + calOffset(midi)); lit.delete(midi); } }, ms || 250);
   }
 
   // Pedale : allume les deux extremites du ruban, envoie seulement sur changement d'etat
@@ -4072,8 +4071,8 @@ const LedStrip = (()=>{
     setStatus('Test en cours\u2026', '');
     let m = 21;
     const iv = setInterval(()=>{
-      send('on:' + calibrate(m) + ':' + (m < 60 ? 'L' : 'R'));
-      if(m > 21) send('off:' + calibrate(m - 1));
+      send('on:' + m + ':' + (m < 60 ? 'L' : 'R') + ':' + calOffset(m));
+      if(m > 21) send('off:' + (m - 1) + ':' + calOffset(m - 1));
       m++;
       if(m > 108){ clearInterval(iv); send('clear'); lit.clear(); setStatus('\u2713 Test termin\u00e9', 'ok'); }
     }, 25);
@@ -4112,7 +4111,7 @@ const LedStrip = (()=>{
   function calRefreshNote(){
     calNoteName.textContent = calNoteLabel(calMidi);
     calDelta = calExistingDelta(calMidi);
-    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta;
+    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta + ' LED';
     calSetStatus('');
     // eteint la derniere LED de test si on change de touche sans valider
     if(calLastSent !== null){ send('off:' + calLastSent); calLastLit = null; calLastSent = null; }
@@ -4123,7 +4122,7 @@ const LedStrip = (()=>{
       return;
     }
     calPointsList.innerHTML = calPoints.map(p=>
-      '<div class="cal-point-row"><span>' + calNoteLabel(p.midi) + ' → décalage ' + (p.delta>0?'+':'') + p.delta +
+      '<div class="cal-point-row"><span>' + calNoteLabel(p.midi) + ' → décalage ' + (p.delta>0?'+':'') + p.delta + ' LED' +
       '</span><button data-midi="' + p.midi + '">✕ Retirer</button></div>'
     ).join('');
     calPointsList.querySelectorAll('button').forEach(b=>{
@@ -4139,9 +4138,9 @@ const LedStrip = (()=>{
   function calTestLight(){
     if(!connected){ calSetStatus('Connecte-toi d\u2019abord au ruban', 'err'); return; }
     if(calLastSent !== null) send('off:' + calLastSent);
-    const virtualMidi = clampMidi(calMidi + calDelta);
-    send('on:' + virtualMidi + ':R');
-    calLastLit = calMidi; calLastSent = virtualMidi;
+    // offset en LEDs physiques, applique par le firmware
+    send('on:' + calMidi + ':R:' + calDelta);
+    calLastLit = calMidi; calLastSent = calMidi + ':' + calDelta;
     calSetStatus('LED allumée — compare avec la touche ' + calNoteLabel(calMidi), '');
   }
 
@@ -4166,12 +4165,12 @@ const LedStrip = (()=>{
   document.getElementById('calTestBtn').addEventListener('click', calTestLight);
   document.getElementById('calNudgeM').addEventListener('click', ()=>{
     calDelta -= 1;
-    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta;
+    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta + ' LED';
     if(calLastLit !== null) calTestLight();
   });
   document.getElementById('calNudgeP').addEventListener('click', ()=>{
     calDelta += 1;
-    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta;
+    calDeltaVal.textContent = 'décalage : ' + (calDelta>0?'+':'') + calDelta + ' LED';
     if(calLastLit !== null) calTestLight();
   });
   document.getElementById('calValidateBtn').addEventListener('click', ()=>{
