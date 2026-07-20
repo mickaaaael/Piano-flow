@@ -1232,6 +1232,14 @@
       <span>Note suivante en blanc atténué :</span>
       <button id="ledNextTgl" class="led-width-btn">Désactivé</button>
     </div>
+    <div class="led-width-row">
+      <span>Luminosité :</span>
+      <div class="cal-nudge">
+        <button id="ledBrightM">− sombre</button>
+        <span id="ledBrightVal">70%</span>
+        <button id="ledBrightP">lumineux +</button>
+      </div>
+    </div>
     <div class="token-status" id="ledStatus"></div>
     <div class="token-btns">
       <button class="btn-skip" id="ledTest">Tester les LEDs</button>
@@ -3940,6 +3948,7 @@ const LedStrip = (()=>{
   const LS_CAL = 'pianoflow_led_calibration'; // [{midi, delta}, ...] tries par midi
   const LS_WIDTH = 'pianoflow_led_width';     // 1 ou 2 LEDs par touche
   const LS_NEXT  = 'pianoflow_led_next';      // apercu de la note suivante (blanc faible)
+  const LS_BRIGHT = 'pianoflow_led_bright';   // luminosite en % (10-100)
   let ws = null, ip = null, connected = false, manualOff = false;
   let lit = new Map();      // midi -> couleur envoyee
   let pedalOn = 'off';      // etat pedale actuellement envoye : 'on'|'release'|'off'
@@ -3996,6 +4005,7 @@ const LedStrip = (()=>{
       setStatus('\u2713 Connect\u00e9 \u00e0 ' + ip, 'ok');
       lit.clear(); pedalOn = 'off'; send('clear');
       send('width:' + ledWidth);   // applique la largeur choisie
+      sendBright();                // applique la luminosite choisie
     };
     ws.onclose = ()=>{
       connected = false;
@@ -4115,6 +4125,24 @@ const LedStrip = (()=>{
   wBtn1.addEventListener('click', ()=> setWidth(1));
   wBtn2.addEventListener('click', ()=> setWidth(2));
   applyWidthUI();
+
+  // ---- Luminosite ----
+  let ledBright = parseInt(localStorage.getItem(LS_BRIGHT) || '70', 10);
+  if(isNaN(ledBright) || ledBright < 10 || ledBright > 100) ledBright = 70;
+  const brightVal = document.getElementById('ledBrightVal');
+  function applyBrightUI(){ brightVal.textContent = ledBright + '%'; }
+  function sendBright(){
+    if(connected) send('bright:' + Math.round(ledBright * 255 / 100));
+  }
+  function setBright(pct){
+    ledBright = Math.max(10, Math.min(100, pct));
+    localStorage.setItem(LS_BRIGHT, String(ledBright));
+    applyBrightUI();
+    sendBright();   // effet immediat sur les LEDs allumees
+  }
+  document.getElementById('ledBrightM').addEventListener('click', ()=> setBright(ledBright - 10));
+  document.getElementById('ledBrightP').addEventListener('click', ()=> setBright(ledBright + 10));
+  applyBrightUI();
 
   // ---- Apercu de la note suivante ----
   let nextOn = localStorage.getItem(LS_NEXT) === '1';
