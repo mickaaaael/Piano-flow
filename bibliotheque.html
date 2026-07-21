@@ -565,25 +565,14 @@ function renderPanel(gid){
    Suppression d'un morceau personnel (local + Gist)
    ============================================================ */
 async function deleteFromGist(key){
-  const token  = localStorage.getItem('pianoflow_gh_token');
-  let   gistId = localStorage.getItem('pianoflow_gist_id');
+  const { token, gistId } = gistCreds();
   if(!token || !gistId) return; // pas de sync configurée : rien à faire
-  const FILENAME = 'pianoflow_songs.json';
-  const headers = {
-    'Authorization': 'token ' + token,
-    'Accept': 'application/vnd.github.v3+json',
-    'Content-Type': 'application/json'
-  };
-  const res = await fetch('https://api.github.com/gists/' + gistId, { headers });
-  if(!res.ok) throw new Error('Gist inaccessible');
-  const gist = await res.json();
-  const raw  = gist.files[FILENAME]?.content || '{"songs":{}}';
-  const data = JSON.parse(raw);
-  if(!data.songs || !(key in data.songs)) return; // déjà absent
-  delete data.songs[key];
+  const songs = await fetchGistSongs();
+  if(!(key in songs)) return;   // déjà absent
+  delete songs[key];
   const patch = await fetch('https://api.github.com/gists/' + gistId, {
-    method:'PATCH', headers,
-    body: JSON.stringify({ files:{ [FILENAME]: { content: JSON.stringify({songs:data.songs}, null, 2) } } })
+    method:'PATCH', headers: gistHeaders(token),
+    body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: JSON.stringify({songs}, null, 2) } } })
   });
   if(!patch.ok) throw new Error('Échec suppression gist');
 }
@@ -677,27 +666,7 @@ document.getElementById('seSave').addEventListener('click', ()=>{
 // Met à jour un morceau dans le Gist (sinon la sync annulerait les modifs
 // à la prochaine ouverture du piano)
 async function updateSongInGist(key, song){
-  const token  = localStorage.getItem('pianoflow_gh_token');
-  const gistId = localStorage.getItem('pianoflow_gist_id');
-  if(!token || !gistId) return;
-  const FILENAME = 'pianoflow_songs.json';
-  const headers = {
-    'Authorization': 'token ' + token,
-    'Accept': 'application/vnd.github.v3+json',
-    'Content-Type': 'application/json'
-  };
-  const res = await fetch('https://api.github.com/gists/' + gistId, { headers });
-  if(!res.ok) throw new Error('Gist inaccessible');
-  const gist = await res.json();
-  const raw  = gist.files[FILENAME]?.content || '{"songs":{}}';
-  const data = JSON.parse(raw);
-  data.songs = data.songs || {};
-  data.songs[key] = song;
-  const patch = await fetch('https://api.github.com/gists/' + gistId, {
-    method:'PATCH', headers,
-    body: JSON.stringify({ files:{ [FILENAME]: { content: JSON.stringify({songs:data.songs}, null, 2) } } })
-  });
-  if(!patch.ok) throw new Error('Échec mise à jour gist');
+  return pushSongToGist(key, song);
 }
 
 function deleteCustomSong(key){
@@ -791,6 +760,65 @@ function saveCustomSong(key, name, parsed){
   local[key] = song;
   setLocalSongsStorage(local);
   SONGS[key] = song; // disponible immédiatement dans cette page
+  // pousse aussi vers le Gist pour que l'autre ordinateur le voie
+  pushSongToGist(key, song).catch(e => console.warn('Sync gist :', e.message));
+}
+
+// ---- Helpers Gist partagés ----
+const GIST_FILENAME = 'pianoflow_songs.json';
+function gistCreds(){
+  return {
+    token:  localStorage.getItem('pianoflow_gh_token'),
+    gistId: localStorage.getItem('pianoflow_gist_id')
+  };
+}
+function gistHeaders(token){
+  return {
+    'Authorization': 'token ' + token,
+    'Accept': 'application/vnd.github.v3+json',
+    'Content-Type': 'application/json'
+  };
+}
+// Lit tous les morceaux stockés dans le Gist
+async function fetchGistSongs(){
+  const { token, gistId } = gistCreds();
+  if(!token || !gistId) return {};
+  const res = await fetch('https://api.github.com/gists/' + gistId, { headers: gistHeaders(token) });
+  if(!res.ok) throw new Error('Gist inaccessible');
+  const gist = await res.json();
+  const raw = gist.files[GIST_FILENAME]?.content || '{"songs":{}}';
+  return JSON.parse(raw).songs || {};
+}
+// Ajoute / met à jour un morceau dans le Gist
+async function pushSongToGist(key, song){
+  const { token, gistId } = gistCreds();
+  if(!token || !gistId) return;
+  const songs = await fetchGistSongs().catch(()=>({}));
+  songs[key] = song;
+  const patch = await fetch('https://api.github.com/gists/' + gistId, {
+    method:'PATCH', headers: gistHeaders(token),
+    body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: JSON.stringify({songs}, null, 2) } } })
+  });
+  if(!patch.ok) throw new Error('Échec envoi gist');
+}
+
+// Fusionne les morceaux du Gist dans le stockage local (au démarrage).
+// Le plus récent (savedAt) gagne en cas de conflit sur une même clé.
+async function mergeGistIntoLocal(){
+  const { token, gistId } = gistCreds();
+  if(!token || !gistId) return false;
+  const remote = await fetchGistSongs();
+  if(!Object.keys(remote).length) return false;
+  const local = getLocalSongs();
+  let changed = false;
+  for(const [key, rsong] of Object.entries(remote)){
+    const lsong = local[key];
+    if(!lsong || (rsong.savedAt||0) > (lsong.savedAt||0)){
+      local[key] = rsong; changed = true;
+    }
+  }
+  if(changed) setLocalSongsStorage(local);
+  return changed;
 }
 function loadCustomSongsIntoSongs(){
   const local = getLocalSongs();
@@ -1219,6 +1247,11 @@ GENRES.forEach((g,i)=>{
   }
 });
 selectGenre(GENRES[0].id);
+
+// Récupère les morceaux ajoutés sur les autres ordinateurs (sync descendante)
+mergeGistIntoLocal()
+  .then(changed => { if(changed) refreshCustomSongs(); })
+  .catch(e => console.warn('Sync descendante gist :', e.message));
 </script>
 </body>
 </html>
