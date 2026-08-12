@@ -686,6 +686,7 @@
   .btn-ed-undo{  color:var(--text); background:rgba(255,255,255,.1); border:1px solid var(--panel-line); }
   .btn-ed-save{ color:#08130e; background:linear-gradient(90deg,#34d399,#10b981); font-weight:600; }
   .btn-ed-insert{ color:#0a0912; background:linear-gradient(90deg,#f6c453,#e08c3a); }
+  .btn-ed-push{ color:#0a0912; background:linear-gradient(90deg,#9d8cff,#6d5ce0); }
   .btn-ed-export{ color:#0a0912; background:linear-gradient(90deg,var(--cyan),var(--violet)); }
   .btn-ed-close{  color:var(--muted); background:rgba(255,255,255,.07); border:1px solid var(--panel-line); }
 
@@ -1256,6 +1257,7 @@
     <button class="btn-ed-dur active" data-dur="0.5">♩ Noire</button>
     <button class="btn-ed-dur" data-dur="1">𝅗𝅥 Blanche</button>
     <button class="btn-ed-dur" data-dur="2">𝅝 Ronde</button>
+    <button class="btn-ed-action btn-ed-push" id="edPushBtn" title="Pousse toutes les notes après la ligne de lecture pour faire de la place">⏏ Décaler la suite</button>
     <div style="flex:1;font-size:12px;color:var(--muted);min-width:150px" id="edAddInfo">Tape la partition pour poser une note ; après, glisse-la pour l'ajuster.</div>
   </div>
 
@@ -3724,6 +3726,20 @@ Règles :
       edAddDur = parseFloat(b.dataset.dur);
       document.querySelectorAll('.btn-ed-dur').forEach(x=>x.classList.toggle('active', x===b));
     });
+  });
+
+  // ---- Décaler la suite : crée un espace vide à la ligne de lecture ----
+  document.getElementById('edPushBtn').addEventListener('click', ()=>{
+    const at = edPlayT;                 // position de la ligne jaune
+    const gap = edAddDur;               // taille du trou = durée sélectionnée
+    edHistory.push(notes.map(n=>({...n})));
+    // toute note qui COMMENCE à/après le point de lecture est repoussée
+    for(const n of notes){
+      if(n.start >= at - 0.0001) n.start += gap;
+    }
+    songEnd = notes.reduce((a,n)=>Math.max(a,n.start+n.dur),0);
+    document.getElementById('edAddInfo').textContent =
+      'Espace de ' + gap + 's créé — tape dedans pour placer tes notes.';
   });
 
   document.getElementById('edArmSelect').addEventListener('click', ()=>{
