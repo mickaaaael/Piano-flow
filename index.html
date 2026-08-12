@@ -2109,19 +2109,52 @@ const LyricsEd = (()=>{
       if(stamps[i] !== undefined) lyrics.push({ t: stamps[i], text: lines[i] });
     }
     lyrics.sort((a,b)=>a.t-b.t);
-    // met à jour le morceau courant + persiste si c'est un morceau perso
-    if(SONGS[currentSongKey]) SONGS[currentSongKey].lyrics = lyrics;
-    loadLyrics(lyrics);
-    // sauvegarde locale/gist si morceau perso
-    try{
-      const local = JSON.parse(localStorage.getItem('pianoflow_local_songs')||'{}');
-      if(local[currentSongKey]){
-        local[currentSongKey].lyrics = lyrics;
-        localStorage.setItem('pianoflow_local_songs', JSON.stringify(local));
-        if(window.GistSync && GistSync.updateSongData) GistSync.updateSongData(currentSongKey, { lyrics });
+
+    let local = {};
+    try { local = JSON.parse(localStorage.getItem('pianoflow_local_songs')||'{}'); }
+    catch(e){ local = {}; }
+
+    if(local[currentSongKey]){
+      // morceau perso : on écrit les paroles directement dessus
+      local[currentSongKey].lyrics = lyrics;
+      localStorage.setItem('pianoflow_local_songs', JSON.stringify(local));
+      if(SONGS[currentSongKey]) SONGS[currentSongKey].lyrics = lyrics;
+      loadLyrics(lyrics);
+      if(window.GistSync && GistSync.updateSongData) GistSync.updateSongData(currentSongKey, { lyrics });
+    } else {
+      // morceau intégré du site : impossible de modifier songs-data.js,
+      // on crée une copie perso (avec les notes) pour que les paroles survivent
+      const base = SONGS[currentSongKey] || {};
+      const key  = 'lyr_' + currentSongKey + '_' + Date.now().toString(36);
+      const name = (base.name || 'Morceau') + ' (avec paroles)';
+      const cleanNotes = (notes||[]).map(n=>({ midi:n.midi, start:n.start, dur:n.dur, hand:n.hand }));
+      const song = {
+        name, notes: cleanNotes,
+        pedal: pedalEvents || [], hasHands: !!hasHands,
+        lyrics, savedAt: Date.now()
+      };
+      local[key] = song;
+      localStorage.setItem('pianoflow_local_songs', JSON.stringify(local));
+      SONGS[key] = song;
+      currentSongKey = key;
+      localStorage.setItem('pianoflow_last_song', key);
+      if(window.GistSync){
+        if(GistSync.addSongToSelect) GistSync.addSongToSelect(key, name);
+        if(GistSync.saveSong) GistSync.saveSong(key, name, song);
       }
-    }catch(e){ console.warn('Sauvegarde paroles :', e); }
+      const sel = document.getElementById('songSelect');
+      if(sel && sel.querySelector('option[value="'+key+'"]')) sel.value = key;
+      loadLyrics(lyrics);
+    }
     close();
+    // confirmation visible (le bandeau clignote une fois)
+    if(lyrics.length){
+      lyricsBand.style.visibility = 'visible';
+      lyricsNowEl.textContent = '✓ Paroles enregistrées';
+      lyricsNowEl.classList.remove('singing');
+      lyricsNextEl.textContent = '';
+      setTimeout(()=>{ /* l'affichage normal reprend au render suivant */ }, 1200);
+    }
   }
 
   document.getElementById('lyricsToSync').addEventListener('click', toSync);
@@ -4610,9 +4643,18 @@ const GistSync = (()=>{
     if(!token) return;
     const gistSongs = await loadFromGist().catch(()=>({}));
     if(!Object.keys(gistSongs).length) return;
-    const all = {...getLocalSongs(), ...gistSongs};
-    setLocalSongs(all);
-    addSavedSongs(all);
+    const local = getLocalSongs();
+    // Fusion par morceau : on garde la version la plus récente (savedAt).
+    // Évite que le Gist écrase une modif locale récente (ex. paroles ajoutées
+    // juste avant un rafraîchissement, avant que l'envoi Gist soit terminé).
+    const merged = {...local};
+    for(const [key, gs] of Object.entries(gistSongs)){
+      const ls = local[key];
+      if(!ls || (gs.savedAt||0) >= (ls.savedAt||0)) merged[key] = gs;
+      // sinon : la version locale est plus récente, on la garde
+    }
+    setLocalSongs(merged);
+    addSavedSongs(merged);
   }
 
   function addSongToSelect(key, name, grp){
