@@ -1354,6 +1354,27 @@
     <button class="btn-ed-action" id="edSelClear" title="Tout désélectionner">✕</button>
   </div>
 
+  <!-- Barre rythme (métronome visuel) -->
+  <div id="edRhythmBar" style="display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap;padding-top:6px">
+    <button class="btn-ed-dur" id="edRhythmToggle" title="Afficher une grille de battements">🎼 Grille rythme</button>
+    <span id="edRhythmCtrls" class="hidden" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--muted)">Tempo</span>
+      <div class="cal-nudge">
+        <button id="edBpmM">−</button>
+        <span id="edBpmVal">90 BPM</span>
+        <button id="edBpmP">+</button>
+      </div>
+      <span style="font-size:12px;color:var(--muted)">Mesure</span>
+      <select id="edSig" style="min-height:38px">
+        <option value="4">4/4</option>
+        <option value="3">3/4</option>
+        <option value="6">6/8</option>
+        <option value="2">2/4</option>
+      </select>
+      <button class="btn-ed-dur" id="edRhythmAlign" title="Cale le premier temps sur la ligne de lecture">⇱ Caler ici</button>
+    </span>
+  </div>
+
 </div>
 
 <!-- ===== MODALE PAROLES ===== -->
@@ -3460,6 +3481,10 @@ Règles :
   let edHistorySnapshot = null;// copie des notes avant un déplacement
   let edAddDur  = 0.5;         // durée par défaut (noire)
   let edScroll  = 0;           // offset de vue (secondes)
+  let edRhythmOn = false;      // grille rythmique visible ?
+  let edBpm = 90;              // tempo en battements/min
+  let edSig = 4;               // battements par mesure
+  let edRhythmOffset = 0;      // décalage du 1er temps (secondes)
   let edZoom    = 1;           // secondes visibles = songEnd/edZoom
   let edCanvas, edCtx, edWrap;
 
@@ -3737,7 +3762,12 @@ Règles :
     }
     else if(edMode === 'add'){
       // Tap direct : la colonne donne la note, la hauteur donne le moment
-      const tStart = yToTime(y, h);
+      let tStart = yToTime(y, h);
+      // aimantation sur le battement le plus proche si la grille rythmique est active
+      if(edRhythmOn && edBpm > 0){
+        const beatDur = 60 / edBpm;
+        tStart = edRhythmOffset + Math.round((tStart - edRhythmOffset) / beatDur) * beatDur;
+      }
       const midi   = xToMidi(x, w);
       const hand   = midi >= (minMidi + maxMidi)/2 ? 'R' : 'L';
       edHistory.push(notes.map(n=>({...n})));
@@ -4086,6 +4116,24 @@ Règles :
   });
 
   // ---- Armement de la sélection (nécessaire avant de pouvoir dessiner une zone) ----
+  // ---- Grille rythmique (métronome visuel) ----
+  function updateBpmUI(){ document.getElementById('edBpmVal').textContent = edBpm + ' BPM'; }
+  document.getElementById('edRhythmToggle').addEventListener('click', ()=>{
+    edRhythmOn = !edRhythmOn;
+    document.getElementById('edRhythmToggle').classList.toggle('active', edRhythmOn);
+    document.getElementById('edRhythmCtrls').classList.toggle('hidden', !edRhythmOn);
+  });
+  document.getElementById('edBpmM').addEventListener('click', ()=>{ edBpm = Math.max(30, edBpm - 5); updateBpmUI(); });
+  document.getElementById('edBpmP').addEventListener('click', ()=>{ edBpm = Math.min(240, edBpm + 5); updateBpmUI(); });
+  document.getElementById('edSig').addEventListener('change', e=>{ edSig = parseInt(e.target.value,10) || 4; });
+  document.getElementById('edRhythmAlign').addEventListener('click', ()=>{
+    // cale le premier temps de mesure sur la position de lecture actuelle
+    edRhythmOffset = edPlayT;
+    document.getElementById('edAddInfo') &&
+      (document.getElementById('edAddInfo').textContent = 'Premier temps calé à ' + edPlayT.toFixed(1) + 's.');
+  });
+  updateBpmUI();
+
   // ---- Sélecteur de durée (mode ajouter) ----
   document.querySelectorAll('.btn-ed-dur').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -4314,6 +4362,33 @@ Règles :
       edCtx.beginPath(); edCtx.moveTo(0,y); edCtx.lineTo(W,y); edCtx.stroke();
       edCtx.fillStyle='rgba(150,130,210,.45)'; edCtx.font='10px Inter';
       edCtx.textAlign='left'; edCtx.fillText(ts+'s', 3, y-3);
+    }
+
+    // ---- Grille rythmique (métronome visuel) ----
+    if(edRhythmOn && edBpm > 0){
+      const beatDur = 60 / edBpm;              // durée d'un battement en secondes
+      const firstBeatIdx = Math.floor((edScroll - edRhythmOffset) / beatDur);
+      const lastBeatIdx  = Math.ceil((edScroll + visibleDur - edRhythmOffset) / beatDur);
+      for(let b = firstBeatIdx; b <= lastBeatIdx; b++){
+        const tBeat = edRhythmOffset + b * beatDur;
+        if(tBeat < 0) continue;
+        const y = timeToY(tBeat, H);
+        if(y < 0 || y > H) continue;
+        const isBar = ((b % edSig) + edSig) % edSig === 0; // premier temps de mesure
+        if(isBar){
+          // ligne de mesure : plus marquée
+          edCtx.strokeStyle = 'rgba(95,227,242,.55)';
+          edCtx.lineWidth = 2;
+          edCtx.setLineDash([]);
+        } else {
+          // battement simple : trait fin pointillé
+          edCtx.strokeStyle = 'rgba(95,227,242,.28)';
+          edCtx.lineWidth = 1;
+          edCtx.setLineDash([4,4]);
+        }
+        edCtx.beginPath(); edCtx.moveTo(0,y); edCtx.lineTo(W,y); edCtx.stroke();
+        edCtx.setLineDash([]);
+      }
     }
 
     // ---- Notes (mêmes couleurs et même sens qu'en mode lecture) ----
