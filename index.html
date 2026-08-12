@@ -725,10 +725,12 @@
     flex:1; position:relative; border-radius:14px; overflow:hidden;
     background:linear-gradient(180deg,#0d0b1c,#06050e);
     border:1px solid var(--panel-line);
-    cursor:crosshair;
+    cursor:default;
   }
+  .editor-canvas-wrap.mode-cut{ cursor:default; }
   .editor-canvas-wrap.mode-delete{ cursor:crosshair; }
-  .editor-canvas-wrap.mode-add{ cursor:none; }  /* curseur géré par canvas */
+  .editor-canvas-wrap.mode-add{ cursor:crosshair; }
+  .editor-canvas-wrap.mode-move{ cursor:grab; }
 
   /* mini portée musicale (aperçu note à ajouter) */
   .ed-staff-preview{
