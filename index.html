@@ -568,6 +568,11 @@
     font-size:36px; line-height:1.2; color:#fff;
     text-shadow:0 2px 12px rgba(0,0,0,.6);
     min-height:42px;
+    transition:color .18s, text-shadow .18s;
+  }
+  .lyrics-now.singing{
+    color:#ffd23f;
+    text-shadow:0 2px 16px rgba(255,190,40,.55), 0 2px 12px rgba(0,0,0,.5);
   }
   .lyrics-next{
     font-size:20px; color:rgba(205,195,235,.65); margin-top:7px;
@@ -1361,6 +1366,14 @@
       <p>Écris tes paroles, <b>une ligne par ligne de chant</b>. Chaque ligne s'affichera au bon moment quand tu joues.</p>
       <textarea id="lyricsText" rows="8" placeholder="Au clair de la lune&#10;Mon ami Pierrot&#10;Prête-moi ta plume&#10;Pour écrire un mot"></textarea>
       <div class="token-status" id="lyricsStep1Status"></div>
+      <div class="led-width-row" style="margin-top:4px">
+        <span>Afficher les paroles en avance :</span>
+        <div class="cal-nudge">
+          <button id="lyricsLeadM">−</button>
+          <span id="lyricsLeadVal">1,0 s</span>
+          <button id="lyricsLeadP">+</button>
+        </div>
+      </div>
       <div class="token-btns">
         <button class="btn-skip" id="lyricsCancel1">Annuler</button>
         <button class="btn-save" id="lyricsToSync">Suivant : caler le rythme →</button>
@@ -2009,7 +2022,17 @@ const LyricsEd = (()=>{
     step1.classList.remove('hidden');
     step2.classList.add('hidden');
     document.getElementById('lyricsStep1Status').textContent = '';
+    updateLeadUI();
     bg.classList.remove('hidden');
+  }
+  function updateLeadUI(){
+    document.getElementById('lyricsLeadVal').textContent =
+      lyricsLead.toFixed(1).replace('.', ',') + ' s';
+  }
+  function setLead(v){
+    lyricsLead = Math.max(0, Math.min(2, Math.round(v*10)/10));
+    localStorage.setItem('pianoflow_lyrics_lead', String(lyricsLead));
+    updateLeadUI();
   }
   function close(){
     bg.classList.add('hidden');
@@ -2102,6 +2125,8 @@ const LyricsEd = (()=>{
   }
 
   document.getElementById('lyricsToSync').addEventListener('click', toSync);
+  document.getElementById('lyricsLeadM').addEventListener('click', ()=> setLead(lyricsLead - 0.5));
+  document.getElementById('lyricsLeadP').addEventListener('click', ()=> setLead(lyricsLead + 0.5));
   document.getElementById('lyricsCancel1').addEventListener('click', close);
   document.getElementById('lyricsBack').addEventListener('click', ()=>{
     if(syncing){ syncing = false; pauseFn(); }
@@ -2563,6 +2588,8 @@ function resolveColor(c){
 // ---- Paroles synchronisées ----
 // Les paroles vivent dans SONGS[key].lyrics = [{t:secondes, text:"..."}] triées par t
 let songLyrics = [];
+let lyricsLead = parseFloat(localStorage.getItem('pianoflow_lyrics_lead') || '1'); // avance en secondes
+if(isNaN(lyricsLead) || lyricsLead < 0 || lyricsLead > 2) lyricsLead = 1;
 const lyricsBand = document.getElementById('lyricsBand');
 const lyricsNowEl = document.getElementById('lyricsNow');
 const lyricsNextEl = document.getElementById('lyricsNext');
@@ -2576,24 +2603,32 @@ function loadLyrics(arr){
 
 function updateLyrics(){
   if(!songLyrics.length) return;
-  // ligne courante = dernière dont le temps est <= t
+  // "idx" = ligne à afficher en grand : la dernière dont le temps AVANCÉ est atteint.
+  // Elle apparaît donc lyricsLead secondes avant son vrai temps de chant.
   let idx = -1;
   for(let i=0;i<songLyrics.length;i++){
-    if(songLyrics[i].t <= t) idx = i; else break;
+    if(songLyrics[i].t - lyricsLead <= t) idx = i; else break;
   }
   const now  = idx >= 0 ? songLyrics[idx].text : '';
   const next = (idx+1 < songLyrics.length) ? songLyrics[idx+1].text : '';
+
+  // Avant la 1re parole : on montre déjà la 1re ligne en aperçu (en bas).
+  if(idx < 0){
+    if(lyricsNowEl.textContent !== '') lyricsNowEl.textContent = '';
+    const preview = songLyrics.length ? songLyrics[0].text : '';
+    if(lyricsNextEl.textContent !== preview) lyricsNextEl.textContent = preview;
+    lyricsBand.style.visibility = preview ? 'visible' : 'hidden';
+    lyricsNowEl.classList.remove('singing');
+    return;
+  }
+
   if(lyricsNowEl.textContent !== now)  lyricsNowEl.textContent  = now;
   if(lyricsNextEl.textContent !== next) lyricsNextEl.textContent = next;
-  // avant la première parole, on affiche déjà la 1re ligne à venir en aperçu
-  // pour ne pas laisser un cadre vide ; on ne cache le cadre que s'il n'y a
-  // vraiment rien à montrer
-  const empty = !now && !next;
-  lyricsBand.style.visibility = empty ? 'hidden' : 'visible';
-  if(idx < 0 && songLyrics.length){
-    // pas encore atteint la 1re ligne : montre-la en petit (aperçu)
-    if(lyricsNextEl.textContent !== songLyrics[0].text) lyricsNextEl.textContent = songLyrics[0].text;
-  }
+  lyricsBand.style.visibility = (now || next) ? 'visible' : 'hidden';
+
+  // Passage en jaune : quand on atteint le VRAI temps de la ligne (fin de l'avance)
+  const singing = songLyrics[idx].t <= t;
+  lyricsNowEl.classList.toggle('singing', singing);
 }
 
 function render(){
