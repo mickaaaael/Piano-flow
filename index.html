@@ -552,23 +552,31 @@
 
   /* ---- bandeau paroles ---- */
   .lyrics-band{
-    position:absolute; top:52px; left:50%; transform:translateX(-50%);
+    position:absolute; top:48px; left:50%; transform:translateX(-50%);
     z-index:8; pointer-events:none; text-align:center;
-    width:92%; max-width:680px;
+    width:auto; max-width:88%;
+    padding:16px 30px; border-radius:20px;
+    background:rgba(10,8,20,.58);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid rgba(150,130,210,.22);
+    box-shadow:0 10px 40px rgba(0,0,0,.45);
   }
+  /* pas de cadre tant qu'il n'y a aucune parole à afficher */
+  .lyrics-band:empty, .lyrics-band.hidden{ display:none; }
   .lyrics-now{
-    font-family:'Space Grotesk',sans-serif; font-weight:600;
-    font-size:26px; line-height:1.25; color:#fff;
-    text-shadow:0 2px 14px rgba(0,0,0,.7);
-    min-height:32px;
+    font-family:'Space Grotesk',sans-serif; font-weight:700;
+    font-size:36px; line-height:1.2; color:#fff;
+    text-shadow:0 2px 12px rgba(0,0,0,.6);
+    min-height:42px;
   }
   .lyrics-next{
-    font-size:15px; color:rgba(200,190,230,.6); margin-top:5px;
-    text-shadow:0 1px 8px rgba(0,0,0,.6);
+    font-size:20px; color:rgba(205,195,235,.65); margin-top:7px;
+    text-shadow:0 1px 8px rgba(0,0,0,.5);
   }
   @media(max-width:680px){
-    .lyrics-now{ font-size:21px; }
-    .lyrics-next{ font-size:13px; }
+    .lyrics-band{ padding:12px 20px; max-width:94%; }
+    .lyrics-now{ font-size:27px; }
+    .lyrics-next{ font-size:16px; }
   }
 
   /* ---- éditeur de paroles ---- */
@@ -2577,6 +2585,15 @@ function updateLyrics(){
   const next = (idx+1 < songLyrics.length) ? songLyrics[idx+1].text : '';
   if(lyricsNowEl.textContent !== now)  lyricsNowEl.textContent  = now;
   if(lyricsNextEl.textContent !== next) lyricsNextEl.textContent = next;
+  // avant la première parole, on affiche déjà la 1re ligne à venir en aperçu
+  // pour ne pas laisser un cadre vide ; on ne cache le cadre que s'il n'y a
+  // vraiment rien à montrer
+  const empty = !now && !next;
+  lyricsBand.style.visibility = empty ? 'hidden' : 'visible';
+  if(idx < 0 && songLyrics.length){
+    // pas encore atteint la 1re ligne : montre-la en petit (aperçu)
+    if(lyricsNextEl.textContent !== songLyrics[0].text) lyricsNextEl.textContent = songLyrics[0].text;
+  }
 }
 
 function render(){
