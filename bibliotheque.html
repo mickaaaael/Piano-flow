@@ -101,6 +101,8 @@
     background:rgba(255,255,255,.04); border:1px solid var(--panel-line); border-radius:14px;
     padding:14px 16px; min-height:60px; transition:background .15s, border-color .15s;
   }
+  /* cartes avec grande pochette : un peu plus d'air */
+  .song-card:has(.song-thumb){ padding:12px 16px; }
   .song-card:active{ background:rgba(255,255,255,.1); }
   .delete-btn{
     flex-shrink:0; width:46px; height:46px; border-radius:50%;
@@ -125,14 +127,17 @@
   .edit-song-btn:active{ transform:scale(.94); }
   @media(hover:hover){ .song-card:hover{ background:rgba(255,255,255,.08); border-color:rgba(170,150,235,.4); } }
   .song-card .open-btn{
-    flex:1; display:flex; flex-direction:row; align-items:center; gap:11px;
+    flex:1; display:flex; flex-direction:row; align-items:center; gap:15px;
     background:none; border:none; color:var(--text); padding:0; text-align:left;
     min-width:0;
   }
   .song-card .open-txt{ display:flex; flex-direction:column; align-items:flex-start; gap:3px; min-width:0; }
   .song-thumb{
-    flex-shrink:0; width:46px; height:46px; border-radius:11px; object-fit:cover;
+    flex-shrink:0; width:130px; height:130px; border-radius:14px; object-fit:cover;
     border:1px solid rgba(255,255,255,.14);
+  }
+  .card-actions{
+    flex-shrink:0; display:flex; align-items:center; gap:10px; margin-left:auto;
   }
   .song-card .name{ font-size:13.5px; font-weight:600; line-height:1.35; }
   .song-card .stars{ font-size:11px; color:var(--gold); }
@@ -525,9 +530,11 @@ function renderPanel(gid){
             ${stars ? `<span class="stars">${stars}</span>` : ''}
           </span>
         </button>
-        <button class="preview-btn" data-key="${key}" title="Écouter un aperçu">▶</button>
-        ${isCustom ? `<button class="edit-song-btn" data-key="${key}" title="Modifier nom, catégorie, image">✏️</button>` : ''}
-        ${gid === 'mymusic' ? `<button class="delete-btn" data-key="${key}" title="Supprimer ce morceau">🗑</button>` : ''}`;
+        <div class="card-actions">
+          <button class="preview-btn" data-key="${key}" title="Écouter un aperçu">▶</button>
+          ${isCustom ? `<button class="edit-song-btn" data-key="${key}" title="Modifier nom, catégorie, image">✏️</button>` : ''}
+          ${gid === 'mymusic' ? `<button class="delete-btn" data-key="${key}" title="Supprimer ce morceau">🗑</button>` : ''}
+        </div>`;
       grid.appendChild(card);
     }
     section.appendChild(grid);
