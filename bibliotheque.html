@@ -52,6 +52,10 @@
     border-radius:12px; padding:11px 16px; min-height:44px; transition:border-color .15s, transform .08s;
   }
   .back-btn:active{ transform:scale(.96); background:rgba(255,255,255,.1); }
+  #toggleHiddenBtn.active-hidden{ border-color:rgba(196,160,255,.6); color:#c4a0ff; background:rgba(196,160,255,.12); }
+  .song-card.is-hidden{ opacity:.55; }
+  .song-card.is-hidden .name::after{ content:' · masqué'; color:var(--muted); font-weight:400; font-size:11px; }
+  .song-card.dragging{ opacity:.85; outline:2px solid var(--cyan); cursor:grabbing; box-shadow:0 12px 30px rgba(0,0,0,.5); }
   @media(hover:hover){ .back-btn:hover{ border-color:rgba(170,150,235,.45); } }
 
   main{ max-width:1040px; margin:0 auto; padding:28px 20px 80px; }
@@ -308,6 +312,12 @@
     padding:10px 13px; min-height:42px;
   }
   .se-img-remove:active{ transform:scale(.96); }
+  .se-hide-row{
+    display:flex; align-items:flex-start; gap:10px; margin:16px 0 4px;
+    font-size:13px; color:var(--text); cursor:pointer;
+  }
+  .se-hide-row input{ width:20px; height:20px; margin-top:1px; flex-shrink:0; accent-color:#c4a0ff; }
+  .se-hide-row small{ color:var(--muted); font-size:11px; }
 </style>
 </head>
 <body>
@@ -315,6 +325,7 @@
 <header>
   <a href="index.html" class="back-btn">← Retour au piano</a>
   <h1>📚 Bibliothèque</h1>
+  <button class="back-btn" id="toggleHiddenBtn" title="Afficher aussi les morceaux masqués">👁 Afficher les cachés</button>
   <button class="back-btn" id="manageBtn">➕ Ajouter / modifier des musiques</button>
 </header>
 
@@ -412,6 +423,10 @@
       </label>
       <button id="seImgRemove" class="se-img-remove" style="display:none">✕ Retirer</button>
     </div>
+    <label class="se-hide-row" id="seHideRow">
+      <input type="checkbox" id="seHide" />
+      <span>Masquer ce morceau de la bibliothèque<br><small>Il reste accessible via « Afficher les cachés » et depuis l'éditeur.</small></span>
+    </label>
     <div class="btns">
       <button class="manage-btn-cancel" id="seCancel">Annuler</button>
       <button class="manage-btn-open" id="seSave">💾 Enregistrer</button>
@@ -458,12 +473,37 @@ const panelsHost = document.getElementById('panelsHost');
 let activeGenre = null;
 
 let customSongKeys = []; // morceaux importés (MIDI / Partition IA), sans "genre"
+let showHidden = false;  // afficher aussi les morceaux masqués ?
+
+// Ordre personnalisé des cartes (glisser-déposer), mémorisé
+function getCardOrder(){
+  try { return JSON.parse(localStorage.getItem('pianoflow_card_order')||'{}'); }
+  catch(e){ return {}; }
+}
+function setCardOrder(o){
+  try { localStorage.setItem('pianoflow_card_order', JSON.stringify(o)); } catch(e){}
+}
 
 function songsForGenre(gid){
+  let list;
   if(gid === 'mymusic'){
-    return customSongKeys.filter(k => SONGS[k]).map(k => [k, SONGS[k]]);
+    list = customSongKeys.filter(k => SONGS[k]).map(k => [k, SONGS[k]]);
+  } else {
+    list = Object.entries(SONGS).filter(([key,s]) => s.genre === gid);
   }
-  return Object.entries(SONGS).filter(([key,s]) => s.genre === gid);
+  // masque les morceaux cachés, sauf si l'option est activée
+  if(!showHidden) list = list.filter(([key,s]) => !s.hidden);
+  // applique l'ordre personnalisé s'il existe pour ce genre
+  const order = getCardOrder()[gid];
+  if(order && order.length){
+    const pos = new Map(order.map((k,i)=>[k,i]));
+    list.sort((a,b)=>{
+      const pa = pos.has(a[0]) ? pos.get(a[0]) : 9999;
+      const pb = pos.has(b[0]) ? pos.get(b[0]) : 9999;
+      return pa - pb;
+    });
+  }
+  return list;
 }
 
 GENRES.forEach(g=>{
@@ -489,6 +529,72 @@ function selectGenre(gid){
   document.querySelectorAll('.genre-btn').forEach((b,i)=> b.classList.toggle('active', GENRES[i].id===gid));
   document.querySelectorAll('.song-panel').forEach(p=> p.classList.toggle('visible', p.id==='panel-'+gid));
   renderPanel(gid);
+}
+
+// ---- Réorganisation des cartes par glisser-déposer (souris + tactile) ----
+function enableCardReorder(grid, gid){
+  let dragEl = null, startY = 0, startX = 0, moved = false, longPressTimer = null;
+
+  function saveOrder(){
+    const keys = Array.from(grid.querySelectorAll('.song-card')).map(c=>c.dataset.key);
+    const all = getCardOrder(); all[gid] = keys; setCardOrder(all);
+  }
+  function afterElement(container, y){
+    const els = Array.from(container.querySelectorAll('.song-card:not(.dragging)'));
+    let closest = null, closestOff = -Infinity;
+    for(const el of els){
+      const box = el.getBoundingClientRect();
+      const off = y - box.top - box.height/2;
+      if(off < 0 && off > closestOff){ closestOff = off; closest = el; }
+    }
+    return closest;
+  }
+  function startDrag(card, x, y){
+    dragEl = card; startX = x; startY = y; moved = false;
+    card.classList.add('dragging');
+  }
+  function moveDrag(x, y){
+    if(!dragEl) return;
+    if(!moved && Math.hypot(x-startX, y-startY) > 6) moved = true;
+    if(!moved) return;
+    const after = afterElement(grid, y);
+    if(after == null) grid.appendChild(dragEl);
+    else grid.insertBefore(dragEl, after);
+  }
+  function endDrag(){
+    if(!dragEl) return;
+    dragEl.classList.remove('dragging');
+    if(moved) saveOrder();
+    dragEl = null; moved = false;
+  }
+
+  grid.querySelectorAll('.song-card').forEach(card=>{
+    // souris
+    card.addEventListener('mousedown', e=>{
+      if(e.target.closest('button')) return; // ne pas gêner les boutons
+      startDrag(card, e.clientX, e.clientY);
+      const mm = ev=> moveDrag(ev.clientX, ev.clientY);
+      const mu = ()=>{ endDrag(); document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu); };
+      document.addEventListener('mousemove', mm);
+      document.addEventListener('mouseup', mu);
+    });
+    // tactile : appui long (350 ms) pour saisir, évite de gêner le scroll
+    card.addEventListener('touchstart', e=>{
+      if(e.target.closest('button')) return;
+      const t = e.touches[0];
+      longPressTimer = setTimeout(()=> startDrag(card, t.clientX, t.clientY), 350);
+    }, {passive:true});
+    card.addEventListener('touchmove', e=>{
+      if(longPressTimer && !dragEl){ clearTimeout(longPressTimer); longPressTimer = null; }
+      if(!dragEl) return;
+      e.preventDefault();
+      moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }, {passive:false});
+    card.addEventListener('touchend', ()=>{
+      if(longPressTimer){ clearTimeout(longPressTimer); longPressTimer = null; }
+      endDrag();
+    });
+  });
 }
 
 function renderPanel(gid){
@@ -526,7 +632,8 @@ function renderPanel(gid){
       const best = progress[key]?.best;
       const stars = best ? starsFor(best) : '';
       const card = document.createElement('div');
-      card.className = 'song-card';
+      card.className = 'song-card' + (s.hidden ? ' is-hidden' : '');
+      card.dataset.key = key;
       const isCustom = customSongKeys.includes(key);
       card.innerHTML = `
         <button class="open-btn" data-key="${key}">
@@ -544,6 +651,7 @@ function renderPanel(gid){
       grid.appendChild(card);
     }
     section.appendChild(grid);
+    enableCardReorder(grid, gid);
     panel.appendChild(section);
   }
 
@@ -613,6 +721,7 @@ function openSongEdit(key){
           .map(g=>`<option value="${g.id}">${g.icon} ${g.label}</option>`).join('');
   seGenreEl.value = s.genre || '';
   seImageData = s.image || null;
+  document.getElementById('seHide').checked = !!s.hidden;
   updateSeImgUI();
   seBg.style.display = 'flex';
 }
@@ -669,6 +778,8 @@ document.getElementById('seSave').addEventListener('click', ()=>{
   if(newName) song.name = newName;
   if(seGenreEl.value) song.genre = seGenreEl.value; else delete song.genre;
   if(seImageData) song.image = seImageData; else delete song.image;
+  if(document.getElementById('seHide').checked) song.hidden = true; else delete song.hidden;
+  song.savedAt = Date.now();
   setLocalSongsStorage(local);
   SONGS[seKey] = song;
   updateSongInGist(seKey, song).catch(e => console.warn('Sync gist :', e.message));
@@ -976,6 +1087,21 @@ function showNameDialog(defaultName, onConfirm){
    Modale "Ajouter / modifier des musiques"
    ============================================================ */
 const manageModalBg = document.getElementById('manageModalBg');
+document.getElementById('toggleHiddenBtn').addEventListener('click', ()=>{
+  showHidden = !showHidden;
+  const btn = document.getElementById('toggleHiddenBtn');
+  btn.textContent = showHidden ? '🙈 Masquer les cachés' : '👁 Afficher les cachés';
+  btn.classList.toggle('active-hidden', showHidden);
+  // recompte les badges et rerend le panneau courant
+  GENRES.forEach((g,i)=>{
+    const b = genresGrid.children[i];
+    if(!b) return;
+    const n = songsForGenre(g.id).length;
+    b.querySelector('.count').textContent = n + ' morceau' + (n>1?'x':'');
+  });
+  if(activeGenre) renderPanel(activeGenre);
+});
+
 document.getElementById('manageBtn').addEventListener('click', ()=>{
   manageModalBg.classList.remove('hidden');
   populateEditSelect();
