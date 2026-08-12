@@ -1364,6 +1364,10 @@
       <p>La lecture démarre. Quand une nouvelle ligne <b>commence à être chantée</b>, appuie sur le gros bouton (ou la barre Espace). La ligne à caler est en surbrillance.</p>
       <div class="lyrics-sync-view" id="lyricsSyncView"></div>
       <button class="lyrics-tap-btn" id="lyricsTapBtn">👆 Caler cette ligne</button>
+      <div style="display:flex;gap:9px;margin-bottom:14px">
+        <button class="btn-skip" id="lyricsPauseBtn" style="flex:1">⏸ Pause</button>
+        <button class="btn-skip" id="lyricsUndoBtn" style="flex:1">↩ Annuler la dernière</button>
+      </div>
       <div class="token-btns">
         <button class="btn-skip" id="lyricsBack">← Retour au texte</button>
         <button class="btn-skip" id="lyricsRestart">↻ Recommencer</button>
@@ -1988,6 +1992,7 @@ const LyricsEd = (()=>{
   let stamps = [];      // temps capturés (index -> secondes)
   let curIdx = 0;       // ligne en cours de calage
   let syncing = false;
+  let paused = false;
 
   function open(){
     // pré-remplit avec les paroles existantes du morceau
@@ -2031,15 +2036,40 @@ const LyricsEd = (()=>{
   }
   function startSync(){
     // repart du début du morceau et lance la lecture
-    reset(); syncing = true;
+    reset(); syncing = true; paused = false;
+    const pb = document.getElementById('lyricsPauseBtn');
+    if(pb) pb.textContent = '⏸ Pause';
     setTimeout(()=> playFn(), 100);
   }
   function tap(){
-    if(!syncing || curIdx >= lines.length) return;
+    if(!syncing || paused || curIdx >= lines.length) return;
     stamps[curIdx] = Math.max(0, t);
     curIdx++;
     renderSyncView();
     if(curIdx >= lines.length){ syncing = false; pauseFn(); }
+  }
+
+  // Pause / reprise : suspend la lecture sans quitter le calage
+  function togglePause(){
+    if(!syncing) return;
+    paused = !paused;
+    const btn = document.getElementById('lyricsPauseBtn');
+    if(paused){ pauseFn(); btn.textContent = '▶ Reprendre'; }
+    else { playFn(); btn.textContent = '⏸ Pause'; }
+  }
+
+  // Annule la dernière ligne calée et replace la lecture juste avant, pour réessayer
+  function undo(){
+    if(!syncing || curIdx === 0) return;
+    curIdx--;
+    const target = stamps[curIdx];
+    stamps[curIdx] = undefined;
+    // recule la lecture ~1,5s avant le point annulé pour se laisser le temps
+    if(target !== undefined){
+      t = Math.max(-lookAhead*0.6, target - 1.5);
+      notes.forEach(n=>{ n.hit = false; });
+    }
+    renderSyncView();
   }
 
   function save(){
@@ -2073,10 +2103,12 @@ const LyricsEd = (()=>{
     stamps = []; curIdx = 0; renderSyncView(); startSync();
   });
   document.getElementById('lyricsSaveBtn').addEventListener('click', save);
+  document.getElementById('lyricsPauseBtn').addEventListener('click', togglePause);
+  document.getElementById('lyricsUndoBtn').addEventListener('click', undo);
   tapBtn.addEventListener('click', tap);
   bg.addEventListener('click', e=>{ if(e.target === bg) close(); });
 
-  return { open, isSyncing: ()=>syncing, tap };
+  return { open, isSyncing: ()=>syncing && !paused, tap };
 })();
 
 document.getElementById('lyricsBtn').addEventListener('click', ()=>{
