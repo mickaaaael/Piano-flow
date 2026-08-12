@@ -550,6 +550,58 @@
     box-shadow:0 0 16px rgba(52,211,153,.3);
   }
 
+  /* ---- bandeau paroles ---- */
+  .lyrics-band{
+    position:absolute; top:52px; left:50%; transform:translateX(-50%);
+    z-index:8; pointer-events:none; text-align:center;
+    width:92%; max-width:680px;
+  }
+  .lyrics-now{
+    font-family:'Space Grotesk',sans-serif; font-weight:600;
+    font-size:26px; line-height:1.25; color:#fff;
+    text-shadow:0 2px 14px rgba(0,0,0,.7);
+    min-height:32px;
+  }
+  .lyrics-next{
+    font-size:15px; color:rgba(200,190,230,.6); margin-top:5px;
+    text-shadow:0 1px 8px rgba(0,0,0,.6);
+  }
+  @media(max-width:680px){
+    .lyrics-now{ font-size:21px; }
+    .lyrics-next{ font-size:13px; }
+  }
+
+  /* ---- éditeur de paroles ---- */
+  #lyricsText{
+    width:100%; font-family:'Inter',sans-serif; font-size:14px; line-height:1.5;
+    color:var(--text); background:rgba(255,255,255,.06);
+    border:1px solid var(--panel-line); border-radius:12px; padding:12px;
+    outline:none; resize:vertical; margin-bottom:12px;
+  }
+  #lyricsText:focus{ border-color:var(--cyan); }
+  .lyrics-sync-view{
+    max-height:220px; overflow-y:auto; margin-bottom:14px;
+    border:1px solid var(--panel-line); border-radius:12px; padding:8px;
+    background:rgba(0,0,0,.2);
+  }
+  .lyrics-sync-line{
+    font-size:14px; padding:9px 12px; border-radius:9px; margin-bottom:4px;
+    color:var(--muted); transition:background .15s, color .15s;
+  }
+  .lyrics-sync-line.done{ color:var(--text); }
+  .lyrics-sync-line.done::before{ content:'✓ '; color:#34d399; }
+  .lyrics-sync-line.current{
+    background:rgba(95,227,242,.14); color:#fff; font-weight:600;
+    outline:1px solid rgba(95,227,242,.5);
+  }
+  .lyrics-tap-btn{
+    width:100%; font-family:'Space Grotesk',sans-serif; font-size:17px; font-weight:600;
+    color:#08130e; background:linear-gradient(90deg,#5fe3f2,#34d399);
+    border:none; border-radius:14px; padding:18px; margin-bottom:14px; cursor:pointer;
+    touch-action:manipulation; user-select:none;
+  }
+  .lyrics-tap-btn:active{ transform:scale(.98); }
+
   /* ---- légende mains ---- */
   .hands-legend{
     position:absolute; top:10px; left:50%; transform:translateX(-50%);
@@ -1038,6 +1090,9 @@
     <button id="recBtn" class="file" title="Enregistre ce que tu joues sur ton piano pour en faire un morceau">
       <span>⏺</span> Enregistrer un morceau
     </button>
+    <button id="lyricsBtn" class="file" title="Ajouter ou modifier les paroles synchronisées">
+      <span>🎤</span> Paroles
+    </button>
     <label class="file" tabindex="0" title="Charger un fichier .mid" style="display:none">
       <span>📁</span> Fichier MIDI
       <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
@@ -1086,6 +1141,12 @@
     <!-- barre segments pédale -->
     <div class="pedal-bar" id="pedalBar"></div>
     <div class="pedal-now" id="pedalNow"></div>
+
+    <!-- paroles synchronisées -->
+    <div class="lyrics-band hidden" id="lyricsBand">
+      <div class="lyrics-now" id="lyricsNow"></div>
+      <div class="lyrics-next" id="lyricsNext"></div>
+    </div>
 
     <!-- indicateurs gestes tactiles -->
     <div class="swipe-hint" id="swipeHint">
@@ -1280,6 +1341,36 @@
     <button class="btn-ed-action" id="edSelClear" title="Tout désélectionner">✕</button>
   </div>
 
+</div>
+
+<!-- ===== MODALE PAROLES ===== -->
+<div class="token-modal-bg hidden" id="lyricsModalBg">
+  <div class="token-modal" style="max-width:620px">
+    <h3>🎤 Paroles synchronisées</h3>
+
+    <!-- Étape 1 : saisir le texte -->
+    <div id="lyricsStep1">
+      <p>Écris tes paroles, <b>une ligne par ligne de chant</b>. Chaque ligne s'affichera au bon moment quand tu joues.</p>
+      <textarea id="lyricsText" rows="8" placeholder="Au clair de la lune&#10;Mon ami Pierrot&#10;Prête-moi ta plume&#10;Pour écrire un mot"></textarea>
+      <div class="token-status" id="lyricsStep1Status"></div>
+      <div class="token-btns">
+        <button class="btn-skip" id="lyricsCancel1">Annuler</button>
+        <button class="btn-save" id="lyricsToSync">Suivant : caler le rythme →</button>
+      </div>
+    </div>
+
+    <!-- Étape 2 : caler le rythme -->
+    <div id="lyricsStep2" class="hidden">
+      <p>La lecture démarre. Quand une nouvelle ligne <b>commence à être chantée</b>, appuie sur le gros bouton (ou la barre Espace). La ligne à caler est en surbrillance.</p>
+      <div class="lyrics-sync-view" id="lyricsSyncView"></div>
+      <button class="lyrics-tap-btn" id="lyricsTapBtn">👆 Caler cette ligne</button>
+      <div class="token-btns">
+        <button class="btn-skip" id="lyricsBack">← Retour au texte</button>
+        <button class="btn-skip" id="lyricsRestart">↻ Recommencer</button>
+        <button class="btn-save" id="lyricsSaveBtn">💾 Enregistrer les paroles</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ===== MODALE TOKEN GITHUB ===== -->
@@ -1842,14 +1933,15 @@ window.addEventListener('resize',()=>{
    Chargement morceau
    ============================================================ */
 function loadNotes(rawNotes,name){
-  // rawNotes : {notes, pedal?, hasHands?, desc?}  OU  tableau nu (legacy)
-  let src, ped=[], hh=false, desc=null;
+  // rawNotes : {notes, pedal?, hasHands?, desc?, lyrics?}  OU  tableau nu (legacy)
+  let src, ped=[], hh=false, desc=null, lyr=[];
   if(Array.isArray(rawNotes)){ src=rawNotes; }
-  else { src=rawNotes.notes||[]; ped=rawNotes.pedal||[]; hh=rawNotes.hasHands||false; desc=rawNotes.desc||null; }
+  else { src=rawNotes.notes||[]; ped=rawNotes.pedal||[]; hh=rawNotes.hasHands||false; desc=rawNotes.desc||null; lyr=rawNotes.lyrics||[]; }
 
   notes=src.map(n=>({midi:n.midi,start:n.start,dur:n.dur,hand:n.hand||null,hit:false}));
   pedalEvents=ped;
   hasHands=hh;
+  loadLyrics(lyr);
   songEnd=notes.reduce((a,n)=>Math.max(a,n.start+n.dur),0);
   fitRange(notes);
   layout();
@@ -1880,6 +1972,118 @@ function pauseFn(){ playing=false;
   document.getElementById('playIc').textContent='▶';
   document.getElementById('playLbl').textContent='Lecture'; }
 function togglePlay(){ playing?pauseFn():playFn(); }
+
+/* ============================================================
+   ÉDITEUR DE PAROLES — texte + capture du rythme en écoutant
+   ============================================================ */
+const LyricsEd = (()=>{
+  const bg    = document.getElementById('lyricsModalBg');
+  const step1 = document.getElementById('lyricsStep1');
+  const step2 = document.getElementById('lyricsStep2');
+  const textEl= document.getElementById('lyricsText');
+  const view  = document.getElementById('lyricsSyncView');
+  const tapBtn= document.getElementById('lyricsTapBtn');
+
+  let lines = [];       // lignes de texte à caler
+  let stamps = [];      // temps capturés (index -> secondes)
+  let curIdx = 0;       // ligne en cours de calage
+  let syncing = false;
+
+  function open(){
+    // pré-remplit avec les paroles existantes du morceau
+    const existing = (SONGS[currentSongKey] && SONGS[currentSongKey].lyrics) || [];
+    textEl.value = existing.map(l=>l.text).join('\n');
+    step1.classList.remove('hidden');
+    step2.classList.add('hidden');
+    document.getElementById('lyricsStep1Status').textContent = '';
+    bg.classList.remove('hidden');
+  }
+  function close(){
+    bg.classList.add('hidden');
+    if(syncing){ syncing = false; pauseFn(); }
+  }
+
+  function toSync(){
+    lines = textEl.value.split('\n').map(s=>s.trim()).filter(s=>s.length);
+    if(!lines.length){
+      document.getElementById('lyricsStep1Status').className = 'token-status err';
+      document.getElementById('lyricsStep1Status').textContent = 'Écris au moins une ligne.';
+      return;
+    }
+    stamps = []; curIdx = 0;
+    step1.classList.add('hidden');
+    step2.classList.remove('hidden');
+    renderSyncView();
+    startSync();
+  }
+  function renderSyncView(){
+    view.innerHTML = lines.map((l,i)=>{
+      const cls = i < curIdx ? 'done' : (i === curIdx ? 'current' : '');
+      return '<div class="lyrics-sync-line ' + cls + '">' +
+        l.replace(/</g,'&lt;') + (stamps[i]!==undefined ? ' <span style="opacity:.6;font-size:12px">('+stamps[i].toFixed(1)+'s)</span>' : '') +
+        '</div>';
+    }).join('');
+    const cur = view.querySelector('.current');
+    if(cur) cur.scrollIntoView({block:'nearest'});
+    tapBtn.textContent = curIdx < lines.length
+      ? '👆 Caler : « ' + lines[curIdx].slice(0,30) + (lines[curIdx].length>30?'…':'') + ' »'
+      : '✓ Toutes les lignes sont calées';
+  }
+  function startSync(){
+    // repart du début du morceau et lance la lecture
+    reset(); syncing = true;
+    setTimeout(()=> playFn(), 100);
+  }
+  function tap(){
+    if(!syncing || curIdx >= lines.length) return;
+    stamps[curIdx] = Math.max(0, t);
+    curIdx++;
+    renderSyncView();
+    if(curIdx >= lines.length){ syncing = false; pauseFn(); }
+  }
+
+  function save(){
+    const lyrics = [];
+    for(let i=0;i<lines.length;i++){
+      if(stamps[i] !== undefined) lyrics.push({ t: stamps[i], text: lines[i] });
+    }
+    lyrics.sort((a,b)=>a.t-b.t);
+    // met à jour le morceau courant + persiste si c'est un morceau perso
+    if(SONGS[currentSongKey]) SONGS[currentSongKey].lyrics = lyrics;
+    loadLyrics(lyrics);
+    // sauvegarde locale/gist si morceau perso
+    try{
+      const local = JSON.parse(localStorage.getItem('pianoflow_local_songs')||'{}');
+      if(local[currentSongKey]){
+        local[currentSongKey].lyrics = lyrics;
+        localStorage.setItem('pianoflow_local_songs', JSON.stringify(local));
+        if(window.GistSync && GistSync.updateSongData) GistSync.updateSongData(currentSongKey, { lyrics });
+      }
+    }catch(e){ console.warn('Sauvegarde paroles :', e); }
+    close();
+  }
+
+  document.getElementById('lyricsToSync').addEventListener('click', toSync);
+  document.getElementById('lyricsCancel1').addEventListener('click', close);
+  document.getElementById('lyricsBack').addEventListener('click', ()=>{
+    if(syncing){ syncing = false; pauseFn(); }
+    step2.classList.add('hidden'); step1.classList.remove('hidden');
+  });
+  document.getElementById('lyricsRestart').addEventListener('click', ()=>{
+    stamps = []; curIdx = 0; renderSyncView(); startSync();
+  });
+  document.getElementById('lyricsSaveBtn').addEventListener('click', save);
+  tapBtn.addEventListener('click', tap);
+  bg.addEventListener('click', e=>{ if(e.target === bg) close(); });
+
+  return { open, isSyncing: ()=>syncing, tap };
+})();
+
+document.getElementById('lyricsBtn').addEventListener('click', ()=>{
+  document.getElementById('sideMenu').classList.remove('open');
+  document.getElementById('sideMenuBg').classList.remove('open');
+  LyricsEd.open();
+});
 
 /* Navigation : saute à une fraction du morceau */
 function seekTo(frac){
@@ -2165,7 +2369,9 @@ function onMIDI(e){
 const heldChars=new Set();
 window.addEventListener('keydown',e=>{
   if(e.repeat)return;
-  if(e.code==='Space'){e.preventDefault();Audio.resume();togglePlay();return;}
+  if(e.code==='Space'){e.preventDefault();
+    if(LyricsEd.isSyncing()){ LyricsEd.tap(); return; }
+    Audio.resume();togglePlay();return;}
   const ch=e.key.toLowerCase();
   if(keyToMidi.has(ch)&&!heldChars.has(ch)){heldChars.add(ch);Audio.resume();onDown(keyToMidi.get(ch));}
 });
@@ -2314,8 +2520,36 @@ function resolveColor(c){
   return c;
 }
 
+// ---- Paroles synchronisées ----
+// Les paroles vivent dans SONGS[key].lyrics = [{t:secondes, text:"..."}] triées par t
+let songLyrics = [];
+const lyricsBand = document.getElementById('lyricsBand');
+const lyricsNowEl = document.getElementById('lyricsNow');
+const lyricsNextEl = document.getElementById('lyricsNext');
+
+function loadLyrics(arr){
+  songLyrics = Array.isArray(arr) ? arr.slice().sort((a,b)=>a.t-b.t) : [];
+  lyricsBand.classList.toggle('hidden', songLyrics.length === 0);
+  lyricsNowEl.textContent = '';
+  lyricsNextEl.textContent = '';
+}
+
+function updateLyrics(){
+  if(!songLyrics.length) return;
+  // ligne courante = dernière dont le temps est <= t
+  let idx = -1;
+  for(let i=0;i<songLyrics.length;i++){
+    if(songLyrics[i].t <= t) idx = i; else break;
+  }
+  const now  = idx >= 0 ? songLyrics[idx].text : '';
+  const next = (idx+1 < songLyrics.length) ? songLyrics[idx+1].text : '';
+  if(lyricsNowEl.textContent !== now)  lyricsNowEl.textContent  = now;
+  if(lyricsNextEl.textContent !== next) lyricsNextEl.textContent = next;
+}
+
 function render(){
   LedStrip.update();
+  updateLyrics();
   cx.clearRect(0,0,W,SH);
 
   // faisceaux Do
@@ -3598,8 +3832,21 @@ Règles :
     if(ind) ind.textContent = 'zoom : ' + edZoom.toFixed(1) + '×';
   }
 
-  document.getElementById('edZoomIn') .addEventListener('click', ()=> applyZoom(edZoom * 1.6));
-  document.getElementById('edZoomOut').addEventListener('click', ()=> applyZoom(edZoom / 1.6));
+  // Zoom aux boutons : si la ligne de lecture est visible à l'écran, on zoome
+  // autour d'elle ; sinon on garde le bas de la vue (moment le plus ancien affiché).
+  function edZoomButton(factor){
+    const visibleDur = songEnd / edZoom;
+    const hasPlayhead = edPlaying || edSeeked;
+    // fraction verticale de la ligne de lecture dans la vue (0 = bas, 1 = haut)
+    let centerFrac = 0;
+    if(hasPlayhead){
+      const frac = (edPlayT - edScroll) / visibleDur;
+      if(frac >= 0 && frac <= 1) centerFrac = frac;   // visible -> on s'ancre dessus
+    }
+    applyZoom(edZoom * factor, centerFrac);
+  }
+  document.getElementById('edZoomIn') .addEventListener('click', ()=> edZoomButton(1.6));
+  document.getElementById('edZoomOut').addEventListener('click', ()=> edZoomButton(1/1.6));
   document.getElementById('edZoomFit').addEventListener('click', ()=>{ edZoom=1; edScroll=0; applyZoom(1); });
 
   // ---- Pinch-to-zoom tactile ----
