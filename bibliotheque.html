@@ -415,6 +415,12 @@
     <input type="text" id="seName" maxlength="60" />
     <label class="se-label" for="seGenre">Catégorie</label>
     <select id="seGenre"></select>
+    <label class="se-label" for="seLevel">Niveau de difficulté</label>
+    <select id="seLevel">
+      <option value="debutant">🟢 Débutant</option>
+      <option value="intermediaire">🟡 Intermédiaire</option>
+      <option value="expert">🔴 Expert</option>
+    </select>
     <label class="se-label">Image</label>
     <div class="se-img-row">
       <img id="seImgPreview" class="se-img-preview" alt="" style="display:none" />
@@ -722,6 +728,7 @@ function openSongEdit(key){
   seGenreEl.value = s.genre || '';
   seImageData = s.image || null;
   document.getElementById('seHide').checked = !!s.hidden;
+  document.getElementById('seLevel').value = s.level || 'intermediaire';
   updateSeImgUI();
   seBg.style.display = 'flex';
 }
@@ -779,6 +786,7 @@ document.getElementById('seSave').addEventListener('click', ()=>{
   if(seGenreEl.value) song.genre = seGenreEl.value; else delete song.genre;
   if(seImageData) song.image = seImageData; else delete song.image;
   if(document.getElementById('seHide').checked) song.hidden = true; else delete song.hidden;
+  song.level = document.getElementById('seLevel').value || 'intermediaire';
   song.savedAt = Date.now();
   setLocalSongsStorage(local);
   SONGS[seKey] = song;
