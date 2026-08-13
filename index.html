@@ -1371,6 +1371,12 @@
         <option value="6">6/8</option>
         <option value="2">2/4</option>
       </select>
+      <span style="font-size:12px;color:var(--muted)">Finesse</span>
+      <select id="edSnap" style="min-height:38px" title="Aimantation des notes">
+        <option value="1">Temps</option>
+        <option value="2">Croches</option>
+        <option value="4">Doubles-croches</option>
+      </select>
       <button class="btn-ed-dur" id="edRhythmAlign" title="Cale le premier temps sur la ligne de lecture">⇱ Caler ici</button>
     </span>
   </div>
@@ -3484,6 +3490,7 @@ Règles :
   let edRhythmOn = false;      // grille rythmique visible ?
   let edBpm = 90;              // tempo en battements/min
   let edSig = 4;               // battements par mesure
+  let edSnapDiv = 1;           // subdivisions par temps pour l'aimantation (1=temps, 2=croche, 4=double)
   let edRhythmOffset = 0;      // décalage du 1er temps (secondes)
   let edZoom    = 1;           // secondes visibles = songEnd/edZoom
   let edCanvas, edCtx, edWrap;
@@ -3763,10 +3770,10 @@ Règles :
     else if(edMode === 'add'){
       // Tap direct : la colonne donne la note, la hauteur donne le moment
       let tStart = yToTime(y, h);
-      // aimantation sur le battement le plus proche si la grille rythmique est active
+      // aimantation sur la subdivision la plus proche si la grille rythmique est active
       if(edRhythmOn && edBpm > 0){
-        const beatDur = 60 / edBpm;
-        tStart = edRhythmOffset + Math.round((tStart - edRhythmOffset) / beatDur) * beatDur;
+        const step = (60 / edBpm) / edSnapDiv;   // pas d'aimantation (temps, croche, double)
+        tStart = edRhythmOffset + Math.round((tStart - edRhythmOffset) / step) * step;
       }
       const midi   = xToMidi(x, w);
       const hand   = midi >= (minMidi + maxMidi)/2 ? 'R' : 'L';
@@ -4126,6 +4133,7 @@ Règles :
   document.getElementById('edBpmM').addEventListener('click', ()=>{ edBpm = Math.max(30, edBpm - 5); updateBpmUI(); });
   document.getElementById('edBpmP').addEventListener('click', ()=>{ edBpm = Math.min(240, edBpm + 5); updateBpmUI(); });
   document.getElementById('edSig').addEventListener('change', e=>{ edSig = parseInt(e.target.value,10) || 4; });
+  document.getElementById('edSnap').addEventListener('change', e=>{ edSnapDiv = parseInt(e.target.value,10) || 1; });
   document.getElementById('edRhythmAlign').addEventListener('click', ()=>{
     // cale le premier temps de mesure sur la position de lecture actuelle
     edRhythmOffset = edPlayT;
@@ -4367,24 +4375,26 @@ Règles :
     // ---- Grille rythmique (métronome visuel) ----
     if(edRhythmOn && edBpm > 0){
       const beatDur = 60 / edBpm;              // durée d'un battement en secondes
-      const firstBeatIdx = Math.floor((edScroll - edRhythmOffset) / beatDur);
-      const lastBeatIdx  = Math.ceil((edScroll + visibleDur - edRhythmOffset) / beatDur);
-      for(let b = firstBeatIdx; b <= lastBeatIdx; b++){
-        const tBeat = edRhythmOffset + b * beatDur;
-        if(tBeat < 0) continue;
-        const y = timeToY(tBeat, H);
+      const step    = beatDur / edSnapDiv;     // pas fin (subdivisions)
+      const firstIdx = Math.floor((edScroll - edRhythmOffset) / step);
+      const lastIdx  = Math.ceil((edScroll + visibleDur - edRhythmOffset) / step);
+      for(let s = firstIdx; s <= lastIdx; s++){
+        const tLine = edRhythmOffset + s * step;
+        if(tLine < 0) continue;
+        const y = timeToY(tLine, H);
         if(y < 0 || y > H) continue;
-        const isBar = ((b % edSig) + edSig) % edSig === 0; // premier temps de mesure
+        const isSubdiv = (s % edSnapDiv) !== 0;                 // pas un temps entier
+        const beatNo = Math.round((tLine - edRhythmOffset) / beatDur);
+        const isBar  = !isSubdiv && (((beatNo % edSig) + edSig) % edSig === 0);
         if(isBar){
-          // ligne de mesure : plus marquée
-          edCtx.strokeStyle = 'rgba(95,227,242,.55)';
-          edCtx.lineWidth = 2;
-          edCtx.setLineDash([]);
+          // ligne de mesure : trait cyan plein et marqué
+          edCtx.strokeStyle = 'rgba(95,227,242,.55)'; edCtx.lineWidth = 2; edCtx.setLineDash([]);
+        } else if(!isSubdiv){
+          // battement : pointillé moyen
+          edCtx.strokeStyle = 'rgba(95,227,242,.28)'; edCtx.lineWidth = 1; edCtx.setLineDash([4,4]);
         } else {
-          // battement simple : trait fin pointillé
-          edCtx.strokeStyle = 'rgba(95,227,242,.28)';
-          edCtx.lineWidth = 1;
-          edCtx.setLineDash([4,4]);
+          // subdivision (croche / double) : pointillé très léger
+          edCtx.strokeStyle = 'rgba(95,227,242,.13)'; edCtx.lineWidth = 1; edCtx.setLineDash([2,5]);
         }
         edCtx.beginPath(); edCtx.moveTo(0,y); edCtx.lineTo(W,y); edCtx.stroke();
         edCtx.setLineDash([]);
