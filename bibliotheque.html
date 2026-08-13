@@ -906,8 +906,17 @@ function setLocalSongsStorage(songs){
   try { localStorage.setItem(LS_LOCAL_KEY, JSON.stringify(songs)); } catch(e){}
 }
 function saveCustomSong(key, name, parsed){
-  const song = { name, notes: parsed.notes, pedal: parsed.pedal||[], hasHands: parsed.hasHands||false, savedAt: Date.now() };
   const local = getLocalSongs();
+  // Préserve les champs déjà présents (lyrics, genre, image, level, hidden…)
+  // pour ne jamais les écraser lors d'un ré-enregistrement.
+  const song = {
+    ...(local[key] || {}),
+    name,
+    notes: parsed.notes,
+    pedal: parsed.pedal || (local[key] && local[key].pedal) || [],
+    hasHands: parsed.hasHands || (local[key] && local[key].hasHands) || false,
+    savedAt: Date.now()
+  };
   local[key] = song;
   setLocalSongsStorage(local);
   SONGS[key] = song; // disponible immédiatement dans cette page
@@ -945,7 +954,10 @@ async function pushSongToGist(key, song){
   const { token, gistId } = gistCreds();
   if(!token || !gistId) return;
   const songs = await fetchGistSongs().catch(()=>({}));
-  songs[key] = song;
+  // Fusionne avec la version distante : si le Gist a des champs que notre
+  // copie locale n'a pas (ex. paroles ajoutées depuis le piano), on les garde.
+  const remote = songs[key] || {};
+  songs[key] = { ...remote, ...song };
   const patch = await fetch('https://api.github.com/gists/' + gistId, {
     method:'PATCH', headers: gistHeaders(token),
     body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: JSON.stringify({songs}, null, 2) } } })

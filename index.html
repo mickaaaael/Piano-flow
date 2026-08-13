@@ -2144,6 +2144,7 @@ const LyricsEd = (()=>{
     if(local[currentSongKey]){
       // morceau perso : on écrit les paroles directement dessus
       local[currentSongKey].lyrics = lyrics;
+      local[currentSongKey].savedAt = Date.now();
       localStorage.setItem('pianoflow_local_songs', JSON.stringify(local));
       if(SONGS[currentSongKey]) SONGS[currentSongKey].lyrics = lyrics;
       loadLyrics(lyrics);
@@ -4816,7 +4817,8 @@ const GistSync = (()=>{
     if(token){
       (async ()=>{
         const all = await loadFromGist().catch(()=>({}));
-        all[key] = { ...(all[key] || {}), ...patch, savedAt: song.savedAt };
+        // fusionne : version distante + notre version locale complète + patch
+        all[key] = { ...(all[key] || {}), ...song };
         saveToGist(all);
       })();
     }
