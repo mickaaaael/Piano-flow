@@ -1011,19 +1011,23 @@ function refreshCustomSongs(){
    ============================================================ */
 function parseMidi(buffer){
   const dv=new DataView(buffer); let p=0;
-  const u8=()=>dv.getUint8(p++);
+  const N=dv.byteLength;
+  const u8=()=>{ if(p>=N) throw new Error('MIDI tronqué'); return dv.getUint8(p++); };
   const u16=()=>{const v=dv.getUint16(p);p+=2;return v;};
   const u32=()=>{const v=dv.getUint32(p);p+=4;return v;};
   const str=n=>{let s='';for(let i=0;i<n;i++)s+=String.fromCharCode(u8());return s;};
-  const vlq=()=>{let v=0,b;do{b=u8();v=(v<<7)|(b&0x7f);}while(b&0x80);return v;};
-  if(str(4)!=='MThd') throw new Error('Fichier non reconnu comme MIDI');
+  const vlq=()=>{let v=0,b,guard=0;do{ if(p>=N) break; b=u8();v=(v<<7)|(b&0x7f); }while((b&0x80)&&(++guard<8));return v;};
+  if(N<14 || str(4)!=='MThd') throw new Error('Fichier non reconnu comme MIDI');
   u32(); u16(); const ntrk=u16(); const division=u16();
   if(division&0x8000) throw new Error('Format MIDI SMPTE non géré');
   const tpq=division||480;
   let tempos=[],raw=[],rawPedal=[];
   for(let tr=0;tr<ntrk;tr++){
-    if(str(4)!=='MTrk') break;
-    const len=u32(); const end=p+len;
+    if(p+8>N) break;
+    if(str(4)!=='MTrk'){ break; }
+    const len=u32();
+    let end=p+len;
+    if(end>N || len<0) end=N;
     let tick=0,running=0; const pending={};
     const closeNote=(chan,note,tk)=>{
       const k=chan*128+note;
@@ -1031,12 +1035,13 @@ function parseMidi(buffer){
     };
     while(p<end){
       tick+=vlq();
+      if(p>=end) break;
       let status=dv.getUint8(p);
       if(status&0x80){p++;running=status;}else status=running;
       const type=status&0xf0,chan=status&0x0f;
       if(status===0xff){
         const meta=u8(),l=vlq();
-        if(meta===0x51){const us=(dv.getUint8(p)<<16)|(dv.getUint8(p+1)<<8)|dv.getUint8(p+2);p+=3;tempos.push({tick,us});}
+        if(meta===0x51 && p+3<=end){const us=(dv.getUint8(p)<<16)|(dv.getUint8(p+1)<<8)|dv.getUint8(p+2);p+=3;tempos.push({tick,us});}
         else p+=l;
       } else if(status===0xf0||status===0xf7){const l=vlq();p+=l;}
       else if(type===0x90){const n=u8(),v=u8();if(v>0)pending[chan*128+n]=tick;else closeNote(chan,n,tick);}
@@ -1048,8 +1053,9 @@ function parseMidi(buffer){
       else if(type===0xa0||type===0xe0)p+=2;
       else if(type===0xc0||type===0xd0)p+=1;
       else p++;
+      if(p>N) break;
     }
-    p=end;
+    p=Math.min(end,N);
   }
   if(!tempos.length) tempos=[{tick:0,us:500000}];
   tempos.sort((a,b)=>a.tick-b.tick);
