@@ -53,6 +53,28 @@
   }
   .back-btn:active{ transform:scale(.96); background:rgba(255,255,255,.1); }
   #toggleHiddenBtn.active-hidden{ border-color:rgba(196,160,255,.6); color:#c4a0ff; background:rgba(196,160,255,.12); }
+  /* indicateur de stockage */
+  .storage-indicator{ display:flex; flex-direction:column; gap:4px; min-width:150px; }
+  .storage-indicator .si-text{ font-size:11px; color:var(--muted); }
+  .storage-indicator .si-bar{ height:6px; border-radius:4px; background:rgba(255,255,255,.1); overflow:hidden; }
+  .storage-indicator .si-fill{
+    display:block; height:100%; width:0%; border-radius:4px;
+    background:linear-gradient(90deg,var(--cyan),var(--violet)); transition:width .3s;
+  }
+  .storage-indicator .si-fill.si-warn{ background:linear-gradient(90deg,#f6c453,#e08c3a); }
+  .storage-indicator .si-fill.si-crit{ background:linear-gradient(90deg,#fb6f8a,#e0323f); }
+  .storage-full-msg{
+    display:none; position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    z-index:200; max-width:520px; width:92%;
+    background:rgba(30,12,18,.97); border:1px solid rgba(251,111,138,.5);
+    border-radius:14px; padding:16px 18px; font-size:13px; line-height:1.5; color:var(--text);
+    box-shadow:0 12px 40px rgba(0,0,0,.5);
+  }
+  .storage-full-msg button{
+    display:block; margin-top:12px; margin-left:auto;
+    font-size:13px; color:#fff; background:rgba(251,111,138,.3);
+    border:1px solid rgba(251,111,138,.6); border-radius:10px; padding:9px 16px; cursor:pointer;
+  }
   .song-card.is-hidden{ opacity:.55; }
   .song-card.is-hidden .name::after{ content:' · masqué'; color:var(--muted); font-weight:400; font-size:11px; }
   .song-card.dragging{ opacity:.85; outline:2px solid var(--cyan); cursor:grabbing; box-shadow:0 12px 30px rgba(0,0,0,.5); }
@@ -333,6 +355,10 @@
   <h1>📚 Bibliothèque</h1>
   <button class="back-btn" id="toggleHiddenBtn" title="Afficher aussi les morceaux masqués">👁 Afficher les cachés</button>
   <button class="back-btn" id="manageBtn">➕ Ajouter / modifier des musiques</button>
+  <div class="storage-indicator" id="storageIndicator" title="Espace utilisé par tes morceaux (limite navigateur ~5 Mo)">
+    <span class="si-text">Stockage : 0 / 5 Mo</span>
+    <span class="si-bar"><span class="si-fill"></span></span>
+  </div>
 </header>
 
 <main>
@@ -903,7 +929,62 @@ function getLocalSongs(){
   catch(e){ return {}; }
 }
 function setLocalSongsStorage(songs){
-  try { localStorage.setItem(LS_LOCAL_KEY, JSON.stringify(songs)); } catch(e){}
+  try {
+    localStorage.setItem(LS_LOCAL_KEY, JSON.stringify(songs));
+    updateStorageIndicator();
+    return true;
+  } catch(e){
+    // QuotaExceededError : le stockage du navigateur (~5 Mo) est plein
+    const full = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    if(full){
+      showStorageFullMessage();
+    } else {
+      console.warn('Échec sauvegarde locale :', e);
+    }
+    return false;
+  }
+}
+
+// ---- Indicateur d'espace de stockage ----
+function bytesUsedByPianoflow(){
+  let total = 0;
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith('pianoflow')){
+      const v = localStorage.getItem(k) || '';
+      total += (k.length + v.length) * 2; // ~2 octets par caractère (UTF-16)
+    }
+  }
+  return total;
+}
+function updateStorageIndicator(){
+  const el = document.getElementById('storageIndicator');
+  if(!el) return;
+  const used = bytesUsedByPianoflow();
+  const usedMB = used / (1024*1024);
+  const cap = 5; // limite typique ~5 Mo
+  const pct = Math.min(100, (usedMB / cap) * 100);
+  el.querySelector('.si-text').textContent =
+    'Stockage : ' + usedMB.toFixed(1).replace('.', ',') + ' / ' + cap + ' Mo';
+  const bar = el.querySelector('.si-fill');
+  bar.style.width = pct + '%';
+  bar.classList.toggle('si-warn', pct >= 75);
+  bar.classList.toggle('si-crit', pct >= 90);
+}
+function showStorageFullMessage(){
+  let box = document.getElementById('storageFullMsg');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'storageFullMsg';
+    box.className = 'storage-full-msg';
+    box.innerHTML = "⚠️ <b>Stockage plein !</b> Ta sauvegarde n'a pas pu être enregistrée. " +
+      "Le navigateur limite l'espace à environ 5 Mo. Pour faire de la place : supprime des morceaux " +
+      "que tu n'utilises plus, ou retire les images de pochette les plus lourdes (elles pèsent le plus). " +
+      '<button id="storageFullClose">Compris</button>';
+    document.body.appendChild(box);
+    box.querySelector('#storageFullClose').addEventListener('click', ()=> box.remove());
+  }
+  box.style.display = 'block';
 }
 function saveCustomSong(key, name, parsed){
   const local = getLocalSongs();
@@ -1433,6 +1514,7 @@ GENRES.forEach((g,i)=>{
   btn.querySelector('.count').textContent = n + ' morceau' + (n>1?'x':'');
 });
 selectGenre(GENRES[0].id);
+updateStorageIndicator();
 
 // Récupère les morceaux ajoutés sur les autres ordinateurs (sync descendante)
 mergeGistIntoLocal()
