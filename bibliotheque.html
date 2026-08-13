@@ -688,8 +688,8 @@ function renderPanel(gid){
         </button>
         <div class="card-actions">
           <button class="preview-btn" data-key="${key}" title="Écouter un aperçu">▶</button>
-          ${isCustom ? `<button class="edit-song-btn" data-key="${key}" title="Modifier nom, catégorie, image">✏️</button>` : ''}
-          ${gid === 'mymusic' ? `<button class="delete-btn" data-key="${key}" title="Supprimer ce morceau">🗑</button>` : ''}
+          <button class="edit-song-btn" data-key="${key}" title="Modifier nom, catégorie, image">✏️</button>
+          <button class="delete-btn" data-key="${key}" title="Supprimer ce morceau">🗑</button>
         </div>`;
       grid.appendChild(card);
     }
@@ -758,8 +758,9 @@ function openSongEdit(key){
   if(!s) return;
   seKey = key;
   seNameEl.value = s.name || '';
-  // catégories proposées : aucune (= Mes morceaux seulement) + toutes sauf mymusic
-  seGenreEl.innerHTML = '<option value="">📁 Mes morceaux uniquement</option>' +
+  // catégories proposées : "sans catégorie" + toutes sauf mymusic
+  const noneLabel = isBuiltin(key) ? '— Aucune catégorie —' : '📁 Mes morceaux uniquement';
+  seGenreEl.innerHTML = '<option value="">' + noneLabel + '</option>' +
     GENRES.filter(g=>g.id!=='mymusic')
           .map(g=>`<option value="${g.id}">${g.icon} ${g.label}</option>`).join('');
   seGenreEl.value = s.genre || '';
@@ -819,23 +820,45 @@ seBg.addEventListener('click', e=>{ if(e.target === seBg) closeSongEdit(); });
 
 document.getElementById('seSave').addEventListener('click', ()=>{
   if(!seKey) return closeSongEdit();
-  const local = getLocalSongs();
-  const song = local[seKey];
-  if(!song){ closeSongEdit(); return; }
   const newName = seNameEl.value.trim();
-  if(newName) song.name = newName;
-  if(seGenreEl.value) song.genre = seGenreEl.value; else delete song.genre;
-  if(seImageData) song.image = seImageData; else delete song.image;
-  if(document.getElementById('seHide').checked) song.hidden = true; else delete song.hidden;
-  song.level = document.getElementById('seLevel').value || 'intermediaire';
-  // badge paroles : si décoché alors que le morceau a des paroles, on le masque
-  if((song.lyrics && song.lyrics.length) && !document.getElementById('seLyricsBadge').checked){
-    song.hideLyricsBadge = true;
-  } else { delete song.hideLyricsBadge; }
-  song.savedAt = Date.now();
-  setLocalSongsStorage(local);
-  SONGS[seKey] = song;
-  updateSongInGist(seKey, song).catch(e => console.warn('Sync gist :', e.message));
+  const genre   = seGenreEl.value || null;
+  const image   = seImageData || null;
+  const hidden  = document.getElementById('seHide').checked;
+  const level   = document.getElementById('seLevel').value || 'intermediaire';
+  const hideLyricsBadge = (SONGS[seKey] && SONGS[seKey].lyrics && SONGS[seKey].lyrics.length)
+    && !document.getElementById('seLyricsBadge').checked;
+
+  if(isBuiltin(seKey)){
+    // morceau intégré : on stocke une surcharge locale (jamais songs-data.js)
+    const ov = getOverrides();
+    const patch = ov[seKey] || {};
+    if(newName) patch.name = newName;
+    if(genre) patch.genre = genre; else delete patch.genre;
+    if(image) patch.image = image; else delete patch.image;
+    if(hidden) patch.hidden = true; else delete patch.hidden;
+    patch.level = level;
+    if(hideLyricsBadge) patch.hideLyricsBadge = true; else delete patch.hideLyricsBadge;
+    delete patch._deleted; // on ré-affiche si c'était supprimé
+    ov[seKey] = patch;
+    setOverrides(ov);
+    // applique en direct sur SONGS
+    SONGS[seKey] = { ...SONGS[seKey], ...patch };
+  } else {
+    // morceau perso : stockage normal
+    const local = getLocalSongs();
+    const song = local[seKey];
+    if(!song){ closeSongEdit(); return; }
+    if(newName) song.name = newName;
+    if(genre) song.genre = genre; else delete song.genre;
+    if(image) song.image = image; else delete song.image;
+    if(hidden) song.hidden = true; else delete song.hidden;
+    song.level = level;
+    if(hideLyricsBadge) song.hideLyricsBadge = true; else delete song.hideLyricsBadge;
+    song.savedAt = Date.now();
+    setLocalSongsStorage(local);
+    SONGS[seKey] = song;
+    updateSongInGist(seKey, song).catch(e => console.warn('Sync gist :', e.message));
+  }
   refreshCustomSongs();
   closeSongEdit();
 });
@@ -849,14 +872,21 @@ async function updateSongInGist(key, song){
 function deleteCustomSong(key){
   // coupe l'aperçu si c'est ce morceau qui joue
   stopPreview();
-  // local
-  const local = getLocalSongs();
-  delete local[key];
-  setLocalSongsStorage(local);
-  delete SONGS[key];
-  // gist (best-effort, sans bloquer l'interface)
-  deleteFromGist(key).catch(e => console.warn('Suppression gist :', e.message));
-  // rafraîchit badge + panneau
+  if(isBuiltin(key)){
+    // morceau intégré : on le marque supprimé dans la surcharge (réversible en
+    // vidant la surcharge, jamais destructif pour songs-data.js)
+    const ov = getOverrides();
+    ov[key] = { _deleted: true };
+    setOverrides(ov);
+    delete SONGS[key];
+  } else {
+    // morceau perso : suppression réelle (local + gist)
+    const local = getLocalSongs();
+    delete local[key];
+    setLocalSongsStorage(local);
+    delete SONGS[key];
+    deleteFromGist(key).catch(e => console.warn('Suppression gist :', e.message));
+  }
   refreshCustomSongs();
 }
 
@@ -924,6 +954,32 @@ function togglePreview(key, btn){
    piano dès l'ouverture d'index.html.
    ============================================================ */
 const LS_LOCAL_KEY = 'pianoflow_local_songs';
+const LS_OVERRIDE_KEY = 'pianoflow_builtin_overrides'; // modifs des morceaux intégrés
+
+// Un morceau est "intégré" (du site) s'il n'est pas dans le stockage perso.
+function isBuiltin(key){
+  try { return !JSON.parse(localStorage.getItem(LS_LOCAL_KEY)||'{}')[key]; }
+  catch(e){ return true; }
+}
+function getOverrides(){
+  try { return JSON.parse(localStorage.getItem(LS_OVERRIDE_KEY) || '{}'); }
+  catch(e){ return {}; }
+}
+function setOverrides(o){
+  try { localStorage.setItem(LS_OVERRIDE_KEY, JSON.stringify(o)); return true; }
+  catch(e){
+    if(e && (e.name==='QuotaExceededError'||e.code===22||e.code===1014)) showStorageFullMessage();
+    return false;
+  }
+}
+// Applique les surcharges (nom, image, niveau, catégorie, masqué, supprimé) sur SONGS
+function applyOverrides(){
+  const ov = getOverrides();
+  for(const [key, patch] of Object.entries(ov)){
+    if(patch._deleted){ delete SONGS[key]; continue; }
+    if(SONGS[key]) SONGS[key] = { ...SONGS[key], ...patch };
+  }
+}
 function getLocalSongs(){
   try { return JSON.parse(localStorage.getItem(LS_LOCAL_KEY) || '{}'); }
   catch(e){ return {}; }
@@ -1065,6 +1121,7 @@ async function mergeGistIntoLocal(){
   return changed;
 }
 function loadCustomSongsIntoSongs(){
+  applyOverrides(); // surcharges des morceaux intégrés d'abord
   const local = getLocalSongs();
   customSongKeys = [];
   for(const [key, s] of Object.entries(local)){
