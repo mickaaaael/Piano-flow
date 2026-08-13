@@ -1406,11 +1406,13 @@ document.getElementById('editOpenBtn').addEventListener('click', ()=>{
    Démarrage
    ============================================================ */
 loadCustomSongsIntoSongs();
+// Recompte TOUS les genres maintenant que les morceaux perso sont chargés
+// (un morceau perso peut appartenir à Chanteurs, Classique, etc.)
 GENRES.forEach((g,i)=>{
-  if(g.id==='mymusic'){
-    genresGrid.children[i].querySelector('.count').textContent =
-      customSongKeys.length + ' morceau' + (customSongKeys.length>1?'x':'');
-  }
+  const btn = genresGrid.children[i];
+  if(!btn) return;
+  const n = songsForGenre(g.id).length;
+  btn.querySelector('.count').textContent = n + ' morceau' + (n>1?'x':'');
 });
 selectGenre(GENRES[0].id);
 
