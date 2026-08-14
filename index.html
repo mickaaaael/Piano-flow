@@ -4583,6 +4583,44 @@ Règles :
    bibliothèque pour que les deux pages partagent les mêmes données.
    ============================================================ */
 const PF_LS_KEY = 'pianoflow_local_songs';
+
+// Récupère les morceaux valides d'un JSON de Gist tronqué/corrompu.
+function salvageSongsFromBrokenJson(raw){
+  const out = {};
+  const songsIdx = raw.indexOf('"songs"');
+  let s = songsIdx >= 0 ? raw.indexOf('{', songsIdx) : raw.indexOf('{');
+  if(s < 0) return out;
+  let i = s + 1;
+  const N = raw.length;
+  while(i < N){
+    while(i < N && raw[i] !== '"' && raw[i] !== '}') i++;
+    if(i >= N || raw[i] === '}') break;
+    let keyStart = i + 1, j = keyStart;
+    while(j < N && raw[j] !== '"') j++;
+    if(j >= N) break;
+    const key = raw.slice(keyStart, j);
+    let k = j + 1;
+    while(k < N && raw[k] !== ':') k++;
+    while(k < N && raw[k] !== '{') k++;
+    if(k >= N) break;
+    let depth = 0, m = k, inStr = false, esc = false, end = -1;
+    for(; m < N; m++){
+      const ch = raw[m];
+      if(esc){ esc = false; continue; }
+      if(ch === '\\'){ esc = true; continue; }
+      if(ch === '"') inStr = !inStr;
+      else if(!inStr){
+        if(ch === '{') depth++;
+        else if(ch === '}'){ depth--; if(depth === 0){ end = m; break; } }
+      }
+    }
+    if(end < 0) break;
+    try { out[key] = JSON.parse(raw.slice(k, end + 1)); } catch(e){}
+    i = end + 1;
+  }
+  return out;
+}
+
 let pfSongsCache = null;
 let pfIdb = null;
 function pfIdbOpen(){
@@ -4722,9 +4760,17 @@ const GistSync = (()=>{
       const id = await getOrCreateGist();
       const gist = await apiCall('GET', '/gists/' + id);
       const raw = gist.files[FILENAME]?.content || '{"songs":{}}';
-      const data = JSON.parse(raw);
+      let songs;
+      try {
+        songs = JSON.parse(raw).songs || {};
+      } catch(parseErr){
+        // Gist corrompu (JSON tronqué par un ancien dépassement de stockage) :
+        // on récupère les morceaux encore valides au lieu de tout perdre.
+        songs = salvageSongsFromBrokenJson(raw);
+        console.warn('Gist corrompu — ' + Object.keys(songs).length + ' morceaux récupérés.');
+      }
       setSyncStatus('synced', '☁ Sync actif');
-      return data.songs || {};
+      return songs;
     } catch(e){
       setSyncStatus('', '☁ Erreur sync');
       console.warn('Erreur chargement gist:', e.message);
