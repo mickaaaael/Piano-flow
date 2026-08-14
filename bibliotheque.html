@@ -486,6 +486,7 @@
     <div class="manage-btns" style="margin-top:16px">
       <button class="manage-btn-cancel" id="syncDiagClose">Fermer</button>
       <button class="manage-btn-open" id="syncDiagForce">⬇ Forcer la récupération</button>
+      <button class="manage-btn-open" id="syncDiagRepair" style="background:linear-gradient(90deg,#f6c453,#e08c3a)">🔧 Réparer le Gist</button>
     </div>
   </div>
 </div>
@@ -1183,8 +1184,69 @@ async function fetchGistSongs(){
   const res = await fetch('https://api.github.com/gists/' + gistId, { headers: gistHeaders(token) });
   if(!res.ok) throw new Error('Gist inaccessible');
   const gist = await res.json();
-  const raw = gist.files[GIST_FILENAME]?.content || '{"songs":{}}';
-  return JSON.parse(raw).songs || {};
+  // Le Gist peut être scindé en plusieurs fichiers si trop gros ; on les concatène.
+  let raw = '';
+  if(gist.files[GIST_FILENAME]) raw = gist.files[GIST_FILENAME].content || '';
+  else {
+    // pas de fichier au nom attendu : prend le premier fichier json trouvé
+    const f = Object.values(gist.files || {}).find(x=>x && x.content);
+    raw = f ? f.content : '{"songs":{}}';
+  }
+  try {
+    return JSON.parse(raw).songs || {};
+  } catch(e){
+    // JSON corrompu (souvent tronqué par un dépassement de stockage) :
+    // on récupère un maximum de morceaux valides plutôt que de tout perdre.
+    const salvaged = salvageSongsFromBrokenJson(raw);
+    console.warn('Gist corrompu — ' + Object.keys(salvaged).length + ' morceaux récupérés sur les fragments valides.');
+    return salvaged;
+  }
+}
+
+// Extrait les morceaux individuels d'un JSON tronqué/corrompu.
+// Chaque morceau est un objet {"clé": {...}} ; on parse un par un ce qui est intact.
+function salvageSongsFromBrokenJson(raw){
+  const out = {};
+  // repère le début de l'objet "songs"
+  const songsIdx = raw.indexOf('"songs"');
+  let s = songsIdx >= 0 ? raw.indexOf('{', songsIdx) : raw.indexOf('{');
+  if(s < 0) return out;
+  let i = s + 1;
+  const N = raw.length;
+  while(i < N){
+    // saute jusqu'à une clé (chaîne entre guillemets)
+    while(i < N && raw[i] !== '"' && raw[i] !== '}') i++;
+    if(i >= N || raw[i] === '}') break;
+    // lit la clé
+    let keyStart = i + 1, j = keyStart;
+    while(j < N && raw[j] !== '"') j++;
+    if(j >= N) break;
+    const key = raw.slice(keyStart, j);
+    // trouve le ':' puis le '{' de la valeur
+    let k = j + 1;
+    while(k < N && raw[k] !== ':') k++;
+    while(k < N && raw[k] !== '{') k++;
+    if(k >= N) break;
+    // équilibre les accolades pour délimiter l'objet du morceau
+    let depth = 0, m = k, inStr = false, esc = false, end = -1;
+    for(; m < N; m++){
+      const ch = raw[m];
+      if(esc){ esc = false; continue; }
+      if(ch === '\\'){ esc = true; continue; }
+      if(ch === '"') inStr = !inStr;
+      else if(!inStr){
+        if(ch === '{') depth++;
+        else if(ch === '}'){ depth--; if(depth === 0){ end = m; break; } }
+      }
+    }
+    if(end < 0) break; // objet tronqué : on s'arrête là, le reste est perdu
+    const objStr = raw.slice(k, end + 1);
+    try {
+      out[key] = JSON.parse(objStr);
+    } catch(e){ /* ce morceau est illisible, on l'ignore */ }
+    i = end + 1;
+  }
+  return out;
 }
 // Ajoute / met à jour un morceau dans le Gist
 async function pushSongToGist(key, song){
@@ -1720,6 +1782,50 @@ document.getElementById('syncDiagForce').addEventListener('click', async ()=>{
     content.innerHTML = '✅ Récupération terminée : <b>' + rc + '</b> morceaux dans le Gist, <b>' + added + '</b> nouveaux ajoutés ici. Ferme cette fenêtre pour les voir.';
   }catch(e){
     content.innerHTML = '<span style="color:#fb6f8a">❌ Échec : ' + e.message + '</span>';
+  }
+});
+
+// Réécrit entièrement le Gist avec ce qui est actuellement sur cet appareil.
+// Récupère d'abord ce qui est sauvable dans le Gist (pour ne rien perdre de
+// l'autre PC), fusionne avec le local, puis écrase le Gist par une version saine.
+document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
+  const content = document.getElementById('syncDiagContent');
+  const { token, gistId } = gistCreds();
+  if(!token || !gistId){
+    content.innerHTML = '<span style="color:#fb6f8a">❌ Token ou Gist absent — configure la sync depuis le piano d\'abord.</span>';
+    return;
+  }
+  content.innerHTML = 'Réparation en cours…';
+  try{
+    // 1. tente de sauver ce qui reste de lisible dans le Gist corrompu
+    let salvaged = {};
+    try { salvaged = await fetchGistSongs(); } catch(e){ salvaged = {}; }
+    // 2. fusionne avec le local (le local, plus récent, l'emporte en cas d'égalité)
+    const local = getLocalSongs();
+    const merged = { ...salvaged };
+    for(const [key, s] of Object.entries(local)){
+      const ex = merged[key];
+      if(!ex || (s.savedAt||0) >= (ex.savedAt||0)) merged[key] = s;
+    }
+    // 3. réécrit un Gist tout propre (écrase le contenu corrompu)
+    const cleanJson = JSON.stringify({ songs: merged }, null, 2);
+    const patch = await fetch('https://api.github.com/gists/' + gistId, {
+      method:'PATCH', headers: gistHeaders(token),
+      body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: cleanJson } } })
+    });
+    if(!patch.ok) throw new Error('GitHub a refusé l\'écriture (' + patch.status + ')');
+    // 4. remet le local à jour avec la version fusionnée
+    setLocalSongsStorage(merged);
+    refreshCustomSongs();
+    const total = Object.keys(merged).length;
+    const savedFromGist = Object.keys(salvaged).length;
+    content.innerHTML =
+      '<span style="color:#34d399">✅ Gist réparé et réécrit proprement !</span><br><br>' +
+      '• <b>' + total + '</b> morceaux au total dans le Gist sain<br>' +
+      '• dont <b>' + savedFromGist + '</b> récupérés de l\'ancien Gist corrompu<br><br>' +
+      '<small style="color:var(--muted)">Ouvre maintenant le diagnostic sur ton autre PC et clique « Forcer la récupération » pour qu\'il reçoive cette version saine.</small>';
+  }catch(e){
+    content.innerHTML = '<span style="color:#fb6f8a">❌ Échec de la réparation : ' + e.message + '</span>';
   }
 });
 
