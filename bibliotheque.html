@@ -354,6 +354,7 @@
   <a href="index.html" class="back-btn">← Retour au piano</a>
   <h1>📚 Bibliothèque</h1>
   <button class="back-btn" id="toggleHiddenBtn" title="Afficher aussi les morceaux masqués">👁 Afficher les cachés</button>
+  <button class="back-btn" id="syncDiagBtn" title="Vérifier l'état de la synchronisation">🔄 Diagnostic synchro</button>
   <button class="back-btn" id="manageBtn">➕ Ajouter / modifier des musiques</button>
   <div class="storage-indicator" id="storageIndicator" title="Espace utilisé par tes morceaux (limite navigateur ~5 Mo)">
     <span class="si-text">Stockage : 0 / 5 Mo</span>
@@ -472,6 +473,19 @@
     <div class="btns">
       <button class="manage-btn-cancel" id="seCancel">Annuler</button>
       <button class="manage-btn-open" id="seSave">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODALE DIAGNOSTIC SYNCHRO ===== -->
+<div class="manage-modal-bg hidden" id="syncDiagBg">
+  <div class="manage-modal" style="max-width:560px">
+    <h3>🔄 Diagnostic de synchronisation</h3>
+    <p>Cet outil vérifie où en est la synchro avec GitHub. Compare l'identifiant du Gist avec celui de ton autre PC : <b>ils doivent être identiques</b> pour que tes morceaux se partagent.</p>
+    <div id="syncDiagContent" style="font-size:13px;line-height:1.7"></div>
+    <div class="manage-btns" style="margin-top:16px">
+      <button class="manage-btn-cancel" id="syncDiagClose">Fermer</button>
+      <button class="manage-btn-open" id="syncDiagForce">⬇ Forcer la récupération</button>
     </div>
   </div>
 </div>
@@ -980,25 +994,97 @@ function applyOverrides(){
     if(SONGS[key]) SONGS[key] = { ...SONGS[key], ...patch };
   }
 }
+/* ============================================================
+   Stockage des morceaux — IndexedDB (grande capacité) avec
+   cache mémoire synchrone + localStorage en filet de sécurité.
+   ============================================================ */
+let songsCache = null;   // {key: song} — source de vérité en mémoire
+let idbDB = null;        // connexion IndexedDB
+
+function idbOpen(){
+  return new Promise((resolve)=>{
+    try{
+      const req = indexedDB.open('pianoflow', 1);
+      req.onupgradeneeded = ()=>{
+        const db = req.result;
+        if(!db.objectStoreNames.contains('songs')) db.createObjectStore('songs');
+      };
+      req.onsuccess = ()=>{ idbDB = req.result; resolve(idbDB); };
+      req.onerror = ()=>{ console.warn('IndexedDB indisponible, repli sur localStorage'); resolve(null); };
+    }catch(e){ resolve(null); }
+  });
+}
+function idbGetAll(){
+  return new Promise((resolve)=>{
+    if(!idbDB) return resolve(null);
+    try{
+      const tx = idbDB.transaction('songs','readonly');
+      const store = tx.objectStore('songs');
+      const out = {};
+      const req = store.openCursor();
+      req.onsuccess = ()=>{
+        const cur = req.result;
+        if(cur){ out[cur.key] = cur.value; cur.continue(); }
+        else resolve(out);
+      };
+      req.onerror = ()=> resolve(null);
+    }catch(e){ resolve(null); }
+  });
+}
+function idbPutAll(songs){
+  return new Promise((resolve)=>{
+    if(!idbDB) return resolve(false);
+    try{
+      const tx = idbDB.transaction('songs','readwrite');
+      const store = tx.objectStore('songs');
+      store.clear();
+      for(const [k,v] of Object.entries(songs)) store.put(v, k);
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> resolve(false);
+    }catch(e){ resolve(false); }
+  });
+}
+
+// Initialise le cache : IndexedDB en priorité, puis fusionne le localStorage
+// (au cas où il contiendrait des morceaux pas encore migrés), puis persiste.
+async function initSongsStorage(){
+  await idbOpen();
+  const fromIdb = (await idbGetAll()) || {};
+  let fromLs = {};
+  try { fromLs = JSON.parse(localStorage.getItem(LS_LOCAL_KEY) || '{}'); } catch(e){}
+  // fusion : on garde la version la plus récente de chaque morceau
+  const merged = { ...fromLs };
+  for(const [k,v] of Object.entries(fromIdb)){
+    const ex = merged[k];
+    if(!ex || (v.savedAt||0) >= (ex.savedAt||0)) merged[k] = v;
+  }
+  songsCache = merged;
+  // migre tout vers IndexedDB (source de vérité)
+  await idbPutAll(songsCache);
+}
+
 function getLocalSongs(){
+  if(songsCache) return songsCache;
+  // fallback avant l'init (rare) : lecture directe localStorage
   try { return JSON.parse(localStorage.getItem(LS_LOCAL_KEY) || '{}'); }
   catch(e){ return {}; }
 }
 function setLocalSongsStorage(songs){
+  songsCache = songs;
+  // 1) IndexedDB : le vrai stockage, grande capacité (asynchrone, best-effort)
+  idbPutAll(songs);
+  // 2) localStorage : filet de sécurité tant qu'il n'est pas plein
   try {
     localStorage.setItem(LS_LOCAL_KEY, JSON.stringify(songs));
-    updateStorageIndicator();
-    return true;
   } catch(e){
-    // QuotaExceededError : le stockage du navigateur (~5 Mo) est plein
+    // localStorage plein : ce n'est PLUS bloquant puisque IndexedDB a pris le relais.
+    // On le signale discrètement une seule fois, sans alarmer.
     const full = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
-    if(full){
-      showStorageFullMessage();
-    } else {
-      console.warn('Échec sauvegarde locale :', e);
-    }
-    return false;
+    if(full) console.info('localStorage plein — IndexedDB prend le relais (aucune perte).');
+    else console.warn('Échec écriture localStorage :', e);
   }
+  updateStorageIndicator();
+  return true;
 }
 
 // ---- Indicateur d'espace de stockage ----
@@ -1016,16 +1102,30 @@ function bytesUsedByPianoflow(){
 function updateStorageIndicator(){
   const el = document.getElementById('storageIndicator');
   if(!el) return;
-  const used = bytesUsedByPianoflow();
-  const usedMB = used / (1024*1024);
-  const cap = 5; // limite typique ~5 Mo
-  const pct = Math.min(100, (usedMB / cap) * 100);
-  el.querySelector('.si-text').textContent =
-    'Stockage : ' + usedMB.toFixed(1).replace('.', ',') + ' / ' + cap + ' Mo';
-  const bar = el.querySelector('.si-fill');
-  bar.style.width = pct + '%';
-  bar.classList.toggle('si-warn', pct >= 75);
-  bar.classList.toggle('si-crit', pct >= 90);
+  // Estimation réelle du navigateur (inclut IndexedDB) si disponible
+  if(navigator.storage && navigator.storage.estimate){
+    navigator.storage.estimate().then(est=>{
+      const usedMB = (est.usage||0) / (1024*1024);
+      const quotaMB = (est.quota||0) / (1024*1024);
+      el.querySelector('.si-text').textContent =
+        'Stockage : ' + usedMB.toFixed(1).replace('.', ',') + ' Mo utilisés' +
+        (quotaMB ? ' (sur ~' + Math.round(quotaMB) + ' Mo dispo)' : '');
+      const pct = quotaMB ? Math.min(100, (usedMB/quotaMB)*100) : 0;
+      const bar = el.querySelector('.si-fill');
+      bar.style.width = Math.max(2, pct) + '%';
+      bar.classList.toggle('si-warn', pct >= 75);
+      bar.classList.toggle('si-crit', pct >= 90);
+    }).catch(()=> updateStorageIndicatorFallback());
+  } else {
+    updateStorageIndicatorFallback();
+  }
+}
+function updateStorageIndicatorFallback(){
+  const el = document.getElementById('storageIndicator');
+  if(!el) return;
+  const usedMB = bytesUsedByPianoflow() / (1024*1024);
+  el.querySelector('.si-text').textContent = 'Stockage : ' + usedMB.toFixed(1).replace('.', ',') + ' Mo';
+  el.querySelector('.si-fill').style.width = Math.min(100, usedMB*4) + '%';
 }
 function showStorageFullMessage(){
   let box = document.getElementById('storageFullMsg');
@@ -1558,25 +1658,92 @@ document.getElementById('editOpenBtn').addEventListener('click', ()=>{
   location.href = 'index.html?song=' + encodeURIComponent(key) + '&edit=1';
 });
 
+// ---- Diagnostic de synchronisation ----
+document.getElementById('syncDiagBtn').addEventListener('click', async ()=>{
+  const bg = document.getElementById('syncDiagBg');
+  const content = document.getElementById('syncDiagContent');
+  bg.classList.remove('hidden');
+  content.innerHTML = 'Vérification en cours…';
+
+  const token  = localStorage.getItem('pianoflow_gh_token');
+  const gistId = localStorage.getItem('pianoflow_gist_id');
+  const localCount = Object.keys(getLocalSongs()).length;
+
+  let lines = [];
+  lines.push(token
+    ? '✅ Token GitHub : configuré'
+    : '❌ Token GitHub : <b>absent</b> — configure-le d\'abord depuis le piano (icône ☁ Sync).');
+  lines.push(gistId
+    ? '📍 Identifiant du Gist sur cet appareil :<br><code style="font-size:11px;color:#5fe3f2;word-break:break-all">' + gistId + '</code><br><small style="color:var(--muted)">→ Vérifie qu\'il est IDENTIQUE sur ton autre PC (même écran de diagnostic).</small>'
+    : '❌ Aucun Gist associé sur cet appareil.');
+  lines.push('💾 Morceaux stockés localement ici : <b>' + localCount + '</b>');
+
+  if(token && gistId){
+    try{
+      const remote = await fetchGistSongs();
+      const remoteCount = Object.keys(remote).length;
+      lines.push('☁ Morceaux présents dans le Gist distant : <b>' + remoteCount + '</b>');
+      if(remoteCount > localCount){
+        lines.push('<span style="color:#f6c453">⚠ Le Gist contient plus de morceaux qu\'en local. Clique « Forcer la récupération » pour les rapatrier.</span>');
+      } else if(remoteCount === 0){
+        lines.push('<span style="color:#f6c453">⚠ Le Gist est vide. Si ton autre PC a des morceaux, c\'est qu\'il utilise un Gist DIFFÉRENT (identifiant différent ci-dessus).</span>');
+      } else {
+        lines.push('<span style="color:#34d399">✓ Local et distant semblent cohérents.</span>');
+      }
+    }catch(e){
+      lines.push('<span style="color:#fb6f8a">❌ Impossible de lire le Gist : ' + e.message + '. Token expiré ou révoqué ?</span>');
+    }
+  }
+  content.innerHTML = lines.map(l=>'<div style="margin-bottom:10px">'+l+'</div>').join('');
+});
+document.getElementById('syncDiagClose').addEventListener('click', ()=>{
+  document.getElementById('syncDiagBg').classList.add('hidden');
+});
+document.getElementById('syncDiagForce').addEventListener('click', async ()=>{
+  const content = document.getElementById('syncDiagContent');
+  content.innerHTML = 'Récupération forcée en cours…';
+  try{
+    const remote = await fetchGistSongs();
+    const rc = Object.keys(remote).length;
+    if(!rc){ content.innerHTML = '⚠ Le Gist distant est vide, rien à récupérer.'; return; }
+    const local = getLocalSongs();
+    let added = 0;
+    for(const [key, rsong] of Object.entries(remote)){
+      const lsong = local[key];
+      if(!lsong || (rsong.savedAt||0) >= (lsong.savedAt||0)){
+        if(!lsong) added++;
+        local[key] = rsong;
+      }
+    }
+    setLocalSongsStorage(local);
+    refreshCustomSongs();
+    content.innerHTML = '✅ Récupération terminée : <b>' + rc + '</b> morceaux dans le Gist, <b>' + added + '</b> nouveaux ajoutés ici. Ferme cette fenêtre pour les voir.';
+  }catch(e){
+    content.innerHTML = '<span style="color:#fb6f8a">❌ Échec : ' + e.message + '</span>';
+  }
+});
+
 /* ============================================================
    Démarrage
    ============================================================ */
-loadCustomSongsIntoSongs();
-// Recompte TOUS les genres maintenant que les morceaux perso sont chargés
-// (un morceau perso peut appartenir à Chanteurs, Classique, etc.)
-GENRES.forEach((g,i)=>{
-  const btn = genresGrid.children[i];
-  if(!btn) return;
-  const n = songsForGenre(g.id).length;
-  btn.querySelector('.count').textContent = n + ' morceau' + (n>1?'x':'');
-});
-selectGenre(GENRES[0].id);
-updateStorageIndicator();
+(async ()=>{
+  await initSongsStorage();          // charge le cache depuis IndexedDB (grande capacité)
+  loadCustomSongsIntoSongs();
+  // Recompte TOUS les genres maintenant que les morceaux perso sont chargés
+  GENRES.forEach((g,i)=>{
+    const btn = genresGrid.children[i];
+    if(!btn) return;
+    const n = songsForGenre(g.id).length;
+    btn.querySelector('.count').textContent = n + ' morceau' + (n>1?'x':'');
+  });
+  selectGenre(GENRES[0].id);
+  updateStorageIndicator();
 
-// Récupère les morceaux ajoutés sur les autres ordinateurs (sync descendante)
-mergeGistIntoLocal()
-  .then(changed => { if(changed) refreshCustomSongs(); })
-  .catch(e => console.warn('Sync descendante gist :', e.message));
+  // Récupère les morceaux ajoutés sur les autres ordinateurs (sync descendante)
+  mergeGistIntoLocal()
+    .then(changed => { if(changed) refreshCustomSongs(); })
+    .catch(e => console.warn('Sync descendante gist :', e.message));
+})();
 </script>
 </body>
 </html>
