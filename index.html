@@ -2696,6 +2696,15 @@ function updateLyrics(){
   lyricsNowEl.classList.toggle('singing', singing);
 }
 
+// Le coût dominant du rendu était l'ombre floue (shadowBlur), désactivée
+// au-delà d'un certain nombre de notes. Le dégradé reste créé par note mais
+// c'est bien moins lourd que le glow. Fonction gardée simple et lisible.
+function noteGradient(c1,c2,top,bottom){
+  const g=cx.createLinearGradient(0,top,0,bottom);
+  g.addColorStop(0,hexA(c1,.55)); g.addColorStop(0.55,c1); g.addColorStop(1,c2);
+  return g;
+}
+
 function render(){
   LedStrip.update();
   updateLyrics();
@@ -2738,6 +2747,20 @@ function render(){
 
   // barres qui tombent — couleur selon main gauche/droite
   // main droite : cyan/violet (défaut) | main gauche : or/orange | mono : cyan/violet
+  // Compte d'abord les notes visibles pour adapter la qualité de rendu.
+  // Beaucoup de notes à l'écran (accords, passages denses) => on allège les
+  // effets les plus coûteux (ombre floue) pour garder la fluidité sur tablette.
+  let visibleCount = 0;
+  for(const n of notes){
+    const bottom=hitY-(n.start-t)*pps;
+    if(bottom<-4) continue;
+    const top=bottom-Math.max(10,n.dur*pps);
+    if(top>hitY) continue;
+    visibleCount++;
+  }
+  const heavyGlow = visibleCount <= 40;   // glow complet seulement si peu de notes
+  const useGlow   = visibleCount <= 90;    // au-delà, glow désactivé (perf)
+
   for(const n of notes){
     const bottom=hitY-(n.start-t)*pps;
     const height=Math.max(10,n.dur*pps);
@@ -2751,28 +2774,30 @@ function render(){
     // choix couleur selon main
     let c1,c2,glowColor;
     if(n.hand==='L'){
-      // main gauche : doré/orange
       c1='#f9ca24'; c2='#f0932b';
       glowColor=black?'rgba(240,147,43,.6)':'rgba(249,202,36,.55)';
     } else {
-      // main droite ou pas d'info
       c1=black?'#c4a0ff':'#5fe3f2'; c2=black?'#7c4ddf':'#1fb6cf';
       glowColor=black?'rgba(160,120,255,.55)':'rgba(95,227,242,.5)';
     }
 
     const x=k.x+2,w=k.w-4,r=Math.min(7,w/2);
-    cx.save();
-    cx.shadowColor=glowColor; cx.shadowBlur=16;
-    const g=cx.createLinearGradient(0,drawTop,0,drawBottom);
-    g.addColorStop(0,hexA(c1,.55)); g.addColorStop(0.55,c1); g.addColorStop(1,c2);
-    cx.fillStyle=g;
-    roundRect(x,drawTop,w,h,r); cx.fill();
-    cx.restore();
+    if(useGlow){
+      cx.save();
+      cx.shadowColor=glowColor; cx.shadowBlur=heavyGlow?16:8;
+      cx.fillStyle=noteGradient(c1,c2,drawTop,drawBottom);
+      roundRect(x,drawTop,w,h,r); cx.fill();
+      cx.restore();
+    } else {
+      // rendu rapide : pas d'ombre, dégradé en cache
+      cx.fillStyle=noteGradient(c1,c2,drawTop,drawBottom);
+      roundRect(x,drawTop,w,h,r); cx.fill();
+    }
     if(bottom<=hitY+1&&bottom>drawTop){
       cx.fillStyle='rgba(255,255,255,.85)';
       roundRect(x,Math.min(drawBottom-3,hitY-3),w,3,1.5); cx.fill();
     }
-    if(h>26&&w>22){
+    if(h>26&&w>22&&visibleCount<=60){
       cx.fillStyle='rgba(10,8,20,.78)'; cx.font='600 11px Inter,sans-serif';
       cx.textAlign='center'; cx.fillText(noteName(n.midi).replace(/[0-9]/,''),x+w/2,drawBottom-7);
     }
