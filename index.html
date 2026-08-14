@@ -2143,15 +2143,13 @@ const LyricsEd = (()=>{
     }
     lyrics.sort((a,b)=>a.t-b.t);
 
-    let local = {};
-    try { local = JSON.parse(localStorage.getItem('pianoflow_local_songs')||'{}'); }
-    catch(e){ local = {}; }
+    let local = pfGetSongs();
 
     if(local[currentSongKey]){
       // morceau perso : on écrit les paroles directement dessus
       local[currentSongKey].lyrics = lyrics;
       local[currentSongKey].savedAt = Date.now();
-      localStorage.setItem('pianoflow_local_songs', JSON.stringify(local));
+      pfSetSongs(local);
       if(SONGS[currentSongKey]) SONGS[currentSongKey].lyrics = lyrics;
       loadLyrics(lyrics);
       if(window.GistSync && GistSync.updateSongData) GistSync.updateSongData(currentSongKey, { lyrics });
@@ -2168,7 +2166,7 @@ const LyricsEd = (()=>{
         lyrics, savedAt: Date.now()
       };
       local[key] = song;
-      localStorage.setItem('pianoflow_local_songs', JSON.stringify(local));
+      pfSetSongs(local);
       SONGS[key] = song;
       currentSongKey = key;
       localStorage.setItem('pianoflow_last_song', key);
@@ -4289,8 +4287,7 @@ Règles :
 
   const edSaveBtn = document.getElementById('edSave');
   function localSongExists(key){
-    try { return !!JSON.parse(localStorage.getItem('pianoflow_local_songs')||'{}')[key]; }
-    catch(e){ return false; }
+    return !!pfGetSongs()[key];
   }
   edSaveBtn.addEventListener('click', ()=>{
     if(!notes.length) return;
@@ -4580,6 +4577,70 @@ Règles :
 /* ============================================================
    Synchronisation GitHub Gist
    ============================================================ */
+/* ============================================================
+   Stockage IndexedDB partagé (grande capacité) — cache mémoire
+   synchrone + localStorage en filet de sécurité. Identique à la
+   bibliothèque pour que les deux pages partagent les mêmes données.
+   ============================================================ */
+const PF_LS_KEY = 'pianoflow_local_songs';
+let pfSongsCache = null;
+let pfIdb = null;
+function pfIdbOpen(){
+  return new Promise((resolve)=>{
+    try{
+      const req = indexedDB.open('pianoflow', 1);
+      req.onupgradeneeded = ()=>{ const db=req.result; if(!db.objectStoreNames.contains('songs')) db.createObjectStore('songs'); };
+      req.onsuccess = ()=>{ pfIdb = req.result; resolve(pfIdb); };
+      req.onerror = ()=> resolve(null);
+    }catch(e){ resolve(null); }
+  });
+}
+function pfIdbGetAll(){
+  return new Promise((resolve)=>{
+    if(!pfIdb) return resolve(null);
+    try{
+      const tx=pfIdb.transaction('songs','readonly'), store=tx.objectStore('songs'), out={};
+      const req=store.openCursor();
+      req.onsuccess=()=>{ const c=req.result; if(c){out[c.key]=c.value;c.continue();}else resolve(out); };
+      req.onerror=()=>resolve(null);
+    }catch(e){ resolve(null); }
+  });
+}
+function pfIdbPutAll(songs){
+  return new Promise((resolve)=>{
+    if(!pfIdb) return resolve(false);
+    try{
+      const tx=pfIdb.transaction('songs','readwrite'), store=tx.objectStore('songs');
+      store.clear();
+      for(const [k,v] of Object.entries(songs)) store.put(v,k);
+      tx.oncomplete=()=>resolve(true); tx.onerror=()=>resolve(false);
+    }catch(e){ resolve(false); }
+  });
+}
+async function pfInitStorage(){
+  await pfIdbOpen();
+  const fromIdb = (await pfIdbGetAll()) || {};
+  let fromLs = {};
+  try { fromLs = JSON.parse(localStorage.getItem(PF_LS_KEY)||'{}'); } catch(e){}
+  const merged = { ...fromLs };
+  for(const [k,v] of Object.entries(fromIdb)){
+    const ex = merged[k];
+    if(!ex || (v.savedAt||0) >= (ex.savedAt||0)) merged[k] = v;
+  }
+  pfSongsCache = merged;
+  await pfIdbPutAll(pfSongsCache);
+}
+function pfGetSongs(){
+  if(pfSongsCache) return pfSongsCache;
+  try { return JSON.parse(localStorage.getItem(PF_LS_KEY)||'{}'); } catch(e){ return {}; }
+}
+function pfSetSongs(songs){
+  pfSongsCache = songs;
+  pfIdbPutAll(songs);
+  try { localStorage.setItem(PF_LS_KEY, JSON.stringify(songs)); }
+  catch(e){ /* localStorage plein : IndexedDB prend le relais, pas bloquant */ }
+}
+
 const GistSync = (()=>{
   const LS_TOKEN = 'pianoflow_gh_token';
   const LS_GIST  = 'pianoflow_gist_id';
@@ -4688,12 +4749,8 @@ const GistSync = (()=>{
   }
 
   // Ajoute un morceau (local + gist)
-  function getLocalSongs(){
-    try { return JSON.parse(localStorage.getItem(LS_LOCAL)||'{}'); } catch(e){ return {}; }
-  }
-  function setLocalSongs(songs){
-    try { localStorage.setItem(LS_LOCAL, JSON.stringify(songs)); } catch(e){}
-  }
+  function getLocalSongs(){ return pfGetSongs(); }
+  function setLocalSongs(songs){ pfSetSongs(songs); }
 
   async function saveSong(key, name, parsed){
     const song = { name, notes: parsed.notes, pedal: parsed.pedal||[], hasHands: parsed.hasHands||false, savedAt: Date.now() };
@@ -5268,12 +5325,11 @@ const LedStrip = (()=>{
    ============================================================ */
 LedStrip.init();
 GistSync.init();
-const restorePromise = GistSync.restoreAll();   // local immédiat, gist en arrière-plan
 
-// Si on arrive depuis la Bibliothèque ou l'Apprentissage avec ?song=cle, on charge ce morceau
 const urlParams = new URLSearchParams(location.search);
 const urlSongKey = urlParams.get('song');
 const urlEdit = urlParams.get('edit') === '1';
+let restorePromise;
 
 function startWithSong(key){
   currentSongKey = key;
@@ -5296,31 +5352,37 @@ function startWithSong(key){
   }
 }
 
-// Sans paramètre d'URL, on reprend le dernier morceau joué
-const lastKey = localStorage.getItem('pianoflow_last_song');
-if(urlSongKey && SONGS[urlSongKey]){
-  startWithSong(urlSongKey);
-} else if(urlSongKey){
-  // Morceau pas encore disponible (probablement en cours de sync gist) :
-  // on démarre sur le morceau par défaut et on bascule dès qu'il arrive
-  startWithSong('ode');
-  restorePromise.then(()=>{ if(SONGS[urlSongKey]) startWithSong(urlSongKey); });
-} else if(lastKey && SONGS[lastKey]){
-  startWithSong(lastKey);
-} else if(lastKey){
-  // dernier morceau perso pas encore synchronisé : bascule dès qu'il arrive
-  startWithSong('ode');
-  restorePromise.then(()=>{ if(SONGS[lastKey]) startWithSong(lastKey); });
-} else {
-  startWithSong('ode');
+// Le démarrage attend que le cache IndexedDB soit prêt, puis restaure les morceaux.
+pfInitStorage().then(()=>{
+  restorePromise = GistSync.restoreAll();
+  bootStart();
+});
+
+function bootStart(){
+  // Sans paramètre d'URL, on reprend le dernier morceau joué
+  const lastKey = localStorage.getItem('pianoflow_last_song');
+  if(urlSongKey && SONGS[urlSongKey]){
+    startWithSong(urlSongKey);
+  } else if(urlSongKey){
+    // Morceau pas encore disponible (probablement en cours de sync gist) :
+    startWithSong('ode');
+    restorePromise.then(()=>{ if(SONGS[urlSongKey]) startWithSong(urlSongKey); });
+  } else if(lastKey && SONGS[lastKey]){
+    startWithSong(lastKey);
+  } else if(lastKey){
+    startWithSong('ode');
+    restorePromise.then(()=>{ if(SONGS[lastKey]) startWithSong(lastKey); });
+  } else {
+    startWithSong('ode');
+  }
+  initMIDI();
+  // Re-layout après que le DOM soit complètement rendu
+  setTimeout(()=>{
+    layout();
+    render();
+  }, 100);
+  requestAnimationFrame(step);
 }
-initMIDI();
-// Re-layout après que le DOM soit complètement rendu
-setTimeout(()=>{
-  layout();
-  render();
-}, 100);
-requestAnimationFrame(step);
 
 // Samples chargés en arrière-plan — le bouton est déjà disponible
 
