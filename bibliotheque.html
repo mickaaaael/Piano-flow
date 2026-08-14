@@ -488,6 +488,14 @@
       <button class="manage-btn-open" id="syncDiagForce">⬇ Forcer la récupération</button>
       <button class="manage-btn-open" id="syncDiagRepair" style="background:linear-gradient(90deg,#f6c453,#e08c3a)">🔧 Réparer le Gist</button>
     </div>
+    <div style="border-top:1px solid var(--panel-line);margin-top:16px;padding-top:14px">
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px">💾 <b style="color:var(--text)">Sauvegarde de secours</b> — un fichier sur ton disque, indépendant de GitHub et du navigateur.</p>
+      <div class="manage-btns" style="margin:0">
+        <button class="manage-btn-open" id="exportLibBtn" style="background:linear-gradient(90deg,#34d399,#10b981)">⬇ Exporter ma bibliothèque</button>
+        <button class="manage-btn-cancel" id="importLibBtn">⬆ Importer une sauvegarde</button>
+        <input type="file" id="importLibInput" accept=".json,application/json" style="display:none" />
+      </div>
+      <div id="exportStatus" style="font-size:12px;color:var(--muted);margin-top:8px"></div>
   </div>
 </div>
 
@@ -1864,6 +1872,74 @@ document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
   }catch(e){
     content.innerHTML = '<span style="color:#fb6f8a">❌ Échec de la réparation : ' + e.message + '</span>';
   }
+});
+
+// ---- Export : télécharge toute la bibliothèque dans un fichier ----
+document.getElementById('exportLibBtn').addEventListener('click', ()=>{
+  const status = document.getElementById('exportStatus');
+  try{
+    const songs = getLocalSongs();
+    const count = Object.keys(songs).length;
+    if(!count){ status.textContent = 'Aucun morceau à exporter.'; return; }
+    const payload = {
+      app: 'PianoFlow',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      count,
+      songs
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    const stamp = d.getFullYear() + '-' +
+      String(d.getMonth()+1).padStart(2,'0') + '-' +
+      String(d.getDate()).padStart(2,'0');
+    a.href = url;
+    a.download = 'pianoflow_sauvegarde_' + stamp + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=> URL.revokeObjectURL(url), 1000);
+    const mb = (blob.size/(1024*1024)).toFixed(2).replace('.', ',');
+    status.innerHTML = '<span style="color:#34d399">✅ ' + count + ' morceaux exportés (' + mb + ' Mo). Garde ce fichier en lieu sûr !</span>';
+  }catch(e){
+    status.innerHTML = '<span style="color:#fb6f8a">❌ Échec de l\'export : ' + e.message + '</span>';
+  }
+});
+
+// ---- Import : restaure une bibliothèque depuis un fichier de sauvegarde ----
+document.getElementById('importLibBtn').addEventListener('click', ()=>{
+  document.getElementById('importLibInput').click();
+});
+document.getElementById('importLibInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const status = document.getElementById('exportStatus');
+  status.textContent = 'Lecture du fichier…';
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      const imported = data.songs || (data.app ? {} : data); // tolère un objet nu
+      const keys = Object.keys(imported);
+      if(!keys.length){ status.innerHTML = '<span style="color:#fb6f8a">❌ Aucun morceau trouvé dans ce fichier.</span>'; return; }
+      // fusion : garde la version la plus récente (savedAt) entre local et fichier
+      const local = getLocalSongs();
+      let added = 0, updated = 0;
+      for(const [key, s] of Object.entries(imported)){
+        const ex = local[key];
+        if(!ex){ local[key] = s; added++; }
+        else if((s.savedAt||0) >= (ex.savedAt||0)){ local[key] = s; updated++; }
+      }
+      setLocalSongsStorage(local);
+      refreshCustomSongs();
+      status.innerHTML = '<span style="color:#34d399">✅ Import réussi : ' + added + ' ajoutés, ' + updated + ' mis à jour. (' + keys.length + ' dans le fichier)</span>';
+    }catch(err){
+      status.innerHTML = '<span style="color:#fb6f8a">❌ Fichier illisible ou corrompu : ' + err.message + '</span>';
+    }
+  };
+  reader.onerror = ()=>{ status.innerHTML = '<span style="color:#fb6f8a">❌ Impossible de lire le fichier.</span>'; };
+  reader.readAsText(file);
+  e.target.value = ''; // permet de réimporter le même fichier
 });
 
 /* ============================================================
