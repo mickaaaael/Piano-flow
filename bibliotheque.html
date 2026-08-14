@@ -1203,6 +1203,21 @@ async function fetchGistSongs(){
   }
 }
 
+// Mesure la taille réelle du Gist (octets) via l'API GitHub.
+async function fetchGistSize(){
+  const { token, gistId } = gistCreds();
+  if(!token || !gistId) return null;
+  const res = await fetch('https://api.github.com/gists/' + gistId, { headers: gistHeaders(token) });
+  if(!res.ok) throw new Error('Gist inaccessible');
+  const gist = await res.json();
+  let bytes = 0;
+  for(const f of Object.values(gist.files || {})){
+    // 'size' est fourni par l'API ; sinon on mesure le contenu
+    bytes += (f && typeof f.size === 'number') ? f.size : ((f && f.content) ? f.content.length : 0);
+  }
+  return bytes;
+}
+
 // Extrait les morceaux individuels d'un JSON tronqué/corrompu.
 // Chaque morceau est un objet {"clé": {...}} ; on parse un par un ce qui est intact.
 function salvageSongsFromBrokenJson(raw){
@@ -1745,6 +1760,28 @@ document.getElementById('syncDiagBtn').addEventListener('click', async ()=>{
       const remote = await fetchGistSongs();
       const remoteCount = Object.keys(remote).length;
       lines.push('☁ Morceaux présents dans le Gist distant : <b>' + remoteCount + '</b>');
+      // Taille du Gist (la vraie limite pratique de la synchro)
+      try{
+        const bytes = await fetchGistSize();
+        if(bytes != null){
+          const mb = bytes / (1024*1024);
+          // GitHub tolère mal au-delà de ~25 Mo dans un Gist ; on prévient bien avant.
+          const cap = 25;
+          const pct = Math.min(100, (mb/cap)*100);
+          let color = '#34d399';
+          if(pct >= 80) color = '#fb6f8a';
+          else if(pct >= 50) color = '#f6c453';
+          lines.push(
+            '📦 Taille du Gist : <b>' + mb.toFixed(2).replace('.', ',') + ' Mo</b> ' +
+            '<small style="color:var(--muted)">(sur ~' + cap + ' Mo conseillés)</small>' +
+            '<div style="height:7px;border-radius:4px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:5px">' +
+            '<div style="height:100%;width:' + Math.max(2,pct) + '%;background:' + color + ';border-radius:4px"></div></div>' +
+            (pct >= 80
+              ? '<br><small style="color:#fb6f8a">⚠ Le Gist devient volumineux. Les images de pochette pèsent le plus : en retirer quelques-unes allège nettement.</small>'
+              : '')
+          );
+        }
+      }catch(e){ /* taille indisponible, on ignore */ }
       if(remoteCount > localCount){
         lines.push('<span style="color:#f6c453">⚠ Le Gist contient plus de morceaux qu\'en local. Clique « Forcer la récupération » pour les rapatrier.</span>');
       } else if(remoteCount === 0){
