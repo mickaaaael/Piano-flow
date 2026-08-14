@@ -810,20 +810,34 @@ function updateSeImgUI(){
   }
 }
 
-// Redimensionne l'image choisie (max 320 px, JPEG) pour rester léger
-// dans le localStorage et le Gist
+// Redimensionne l'image choisie pour rester très légère dans le stockage et le
+// Gist. Les pochettes s'affichent à ~130 px : 240 px suffit largement (net même
+// sur écran haute densité). Compression progressive pour viser un petit poids.
 function resizeImageFile(file, cb){
   const rd = new FileReader();
   rd.onload = ()=>{
     const img = new Image();
     img.onload = ()=>{
-      const max = 320;
+      const max = 240;
       const k = Math.min(1, max / Math.max(img.width, img.height));
       const w = Math.round(img.width * k), h = Math.round(img.height * k);
       const cv = document.createElement('canvas');
       cv.width = w; cv.height = h;
-      cv.getContext('2d').drawImage(img, 0, 0, w, h);
-      cb(cv.toDataURL('image/jpeg', 0.82));
+      const ctx = cv.getContext('2d');
+      // fond blanc (évite le noir sur les PNG transparents convertis en JPEG)
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img, 0, 0, w, h);
+      // compression adaptative : on baisse la qualité jusqu'à passer sous ~30 Ko
+      let quality = 0.78;
+      let dataUrl = cv.toDataURL('image/jpeg', quality);
+      const targetBytes = 30 * 1024; // ~30 Ko visé
+      while(dataUrl.length * 0.75 > targetBytes && quality > 0.4){
+        quality -= 0.1;
+        dataUrl = cv.toDataURL('image/jpeg', quality);
+      }
+      const kb = Math.round(dataUrl.length * 0.75 / 1024);
+      console.info('Pochette compressée : ~' + kb + ' Ko (qualité ' + quality.toFixed(1) + ')');
+      cb(dataUrl);
     };
     img.onerror = ()=> alert('Image illisible, essaie un autre fichier.');
     img.src = rd.result;
