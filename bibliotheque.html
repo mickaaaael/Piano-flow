@@ -1863,6 +1863,49 @@ document.getElementById('syncDiagForce').addEventListener('click', async ()=>{
 // Réécrit entièrement le Gist avec ce qui est actuellement sur cet appareil.
 // Récupère d'abord ce qui est sauvable dans le Gist (pour ne rien perdre de
 // l'autre PC), fusionne avec le local, puis écrase le Gist par une version saine.
+// Analyse un morceau pour trouver ce qui pourrait casser le JSON du Gist.
+function diagnoseSong(s){
+  const issues = [];
+  try {
+    // concatène tous les champs texte bruts pour l'inspection
+    let text = (s.name||'');
+    if(Array.isArray(s.lyrics)) text += ' ' + s.lyrics.map(l=>l&&l.text||'').join(' ');
+    // caractères de contrôle invisibles (hors \n \t) : cause fréquente de rejet
+    const ctrl = text.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g);
+    if(ctrl) issues.push('⚠ Contient ' + ctrl.length + ' caractère(s) de contrôle invisible(s) dans le texte — cause probable du rejet.');
+    // caractères de substitution UTF-16 orphelins (émojis cassés)
+    let bad = 0;
+    for(let i=0;i<text.length;i++){
+      const c = text.charCodeAt(i);
+      if(c>=0xD800 && c<=0xDBFF){ const n=text.charCodeAt(i+1); if(!(n>=0xDC00&&n<=0xDFFF)) bad++; else i++; }
+      else if(c>=0xDC00 && c<=0xDFFF) bad++;
+    }
+    if(bad) issues.push('⚠ Contient ' + bad + ' caractère(s) Unicode incomplet(s) (émoji cassé) — cause probable du rejet.');
+    const sizeKB = Math.round(JSON.stringify(s).length/1024);
+    issues.push('Taille du morceau : ' + sizeKB + ' Ko' + (s.image ? ' (dont une image)' : ''));
+  } catch(e){
+    issues.push('⚠ Le morceau ne peut même pas être converti en JSON : ' + e.message);
+  }
+  return issues;
+}
+
+// Nettoie un morceau : retire les caractères de contrôle et Unicode cassés
+// des champs texte (nom, paroles), sans toucher aux notes.
+function cleanSong(s){
+  const clean = {...s};
+  const scrub = (str)=> typeof str === 'string'
+    ? str.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+         .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+         .replace(/(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, m=>m.slice(0,-1))
+    : str;
+  if(clean.name) clean.name = scrub(clean.name);
+  if(Array.isArray(clean.lyrics)){
+    clean.lyrics = clean.lyrics.map(l=>({ ...l, text: scrub(l.text) }));
+  }
+  clean.savedAt = Date.now(); // force la version nettoyée à gagner
+  return clean;
+}
+
 document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
   const content = document.getElementById('syncDiagContent');
   const { token, gistId } = gistCreds();
@@ -1895,11 +1938,11 @@ document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
       throw new Error('GitHub a refusé l\'écriture (' + detail + '). Taille : ' + sizeMB + ' Mo.');
     }
     // 3b. VÉRIFICATION : relit le Gist pour confirmer que tout est arrivé
-    let verifyCount = -1, verifyOk = true;
+    let verifyCount = -1, verifyOk = true, missingKeys = [];
     try {
       const check = await fetchGistSongs();
       verifyCount = Object.keys(check).length;
-      for(const key of Object.keys(local)){ if(!check[key]){ verifyOk = false; break; } }
+      for(const key of Object.keys(merged)){ if(!check[key]){ verifyOk = false; missingKeys.push(key); } }
     } catch(e){ verifyOk = false; }
     // 4. remet le local à jour avec la version fusionnée
     setLocalSongsStorage(merged);
@@ -1913,13 +1956,35 @@ document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
         '• Vérification OK : les ' + verifyCount + ' morceaux sont bien présents.<br><br>' +
         '<small style="color:var(--muted)">Sur ton autre PC : « Forcer la récupération » pour recevoir cette version.</small>';
     } else {
+      // Analyse du/des morceau(x) manquant(s) pour trouver la cause
+      let analysis = '';
+      for(const key of missingKeys){
+        const s = merged[key];
+        if(!s){ continue; }
+        const name = s.name || key;
+        const issues = diagnoseSong(s);
+        analysis += '<div style="margin-top:8px;padding:8px 10px;background:rgba(251,111,138,.1);border-radius:8px">' +
+          '<b>« ' + name.replace(/</g,'&lt;') + ' »</b> ne monte pas.<br><small>' +
+          (issues.length ? issues.join('<br>') : 'Aucun problème évident détecté dans le contenu.') +
+          '</small></div>';
+      }
       content.innerHTML =
-        '<span style="color:#fb6f8a">⚠ Écriture faite mais un ou plusieurs morceaux manquent à la relecture.</span><br><br>' +
+        '<span style="color:#fb6f8a">⚠ Un morceau a été rejeté par GitHub à l\'écriture.</span><br><br>' +
         '• Envoyé : <b>' + total + '</b> morceaux (' + sizeMB + ' Mo)<br>' +
-        '• Relu dans le Gist : <b>' + (verifyCount<0?'?':verifyCount) + '</b><br><br>' +
-        (parseFloat(sizeMB) > 8
-          ? '<small style="color:#fb6f8a">⚠ Le Gist est gros (' + sizeMB + ' Mo). Le titre qui coince a probablement une <b>grosse image</b> qui fait dépasser la limite. Ouvre « ✏️ Modifier » sur ce titre, retire ou re-choisis son image (elle sera recompressée), puis réessaie.</small>'
-          : '<small style="color:var(--muted)">Réessaie une fois. Si ça persiste, le titre qui coince a peut-être un contenu inhabituel — dis-le-moi.</small>');
+        '• Accepté par le Gist : <b>' + (verifyCount<0?'?':verifyCount) + '</b><br>' +
+        analysis +
+        '<div style="margin-top:10px"><button id="syncDiagFixSong" style="font-size:12px;color:#fff;background:rgba(52,211,153,.3);border:1px solid rgba(52,211,153,.6);border-radius:9px;padding:8px 14px;cursor:pointer">🧹 Nettoyer ce morceau et réessayer</button></div>';
+      // bouton de nettoyage automatique
+      const fixBtn = document.getElementById('syncDiagFixSong');
+      if(fixBtn) fixBtn.addEventListener('click', async ()=>{
+        const local2 = getLocalSongs();
+        for(const key of missingKeys){
+          if(local2[key]) local2[key] = cleanSong(local2[key]);
+        }
+        setLocalSongsStorage(local2);
+        content.innerHTML = 'Morceau nettoyé, nouvelle tentative…';
+        document.getElementById('syncDiagRepair').click();
+      });
     }
   }catch(e){
     content.innerHTML = '<span style="color:#fb6f8a">❌ Échec de la réparation : ' + e.message + '</span>';
