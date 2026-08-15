@@ -1811,6 +1811,22 @@ document.getElementById('syncDiagBtn').addEventListener('click', async ()=>{
       } else {
         lines.push('<span style="color:#34d399">✓ Local et distant semblent cohérents.</span>');
       }
+      // Liste détaillée : quels morceaux sont dans le Gist mais PAS en local
+      const local = getLocalSongs();
+      const missing = Object.entries(remote)
+        .filter(([k]) => !local[k])
+        .map(([k,s]) => (s.name || k));
+      const onlyLocal = Object.entries(local)
+        .filter(([k]) => !remote[k])
+        .map(([k,s]) => (s.name || k));
+      if(missing.length){
+        lines.push('<div style="margin-top:8px;padding:8px 10px;background:rgba(246,196,83,.1);border-radius:8px"><b>Dans le Gist mais absents ici (' + missing.length + ') :</b><br><small>' +
+          missing.slice(0,30).map(n=>n.replace(/</g,'&lt;')).join(', ') + (missing.length>30?'…':'') + '</small></div>');
+      }
+      if(onlyLocal.length){
+        lines.push('<div style="margin-top:8px;padding:8px 10px;background:rgba(95,227,242,.08);border-radius:8px"><b>Ici mais pas encore dans le Gist (' + onlyLocal.length + ') :</b><br><small>' +
+          onlyLocal.slice(0,30).map(n=>n.replace(/</g,'&lt;')).join(', ') + (onlyLocal.length>30?'…':'') + '</small><br><small style="color:var(--muted)">→ Utilise « 🔧 Réparer le Gist » pour les y envoyer.</small></div>');
+      }
     }catch(e){
       lines.push('<span style="color:#fb6f8a">❌ Impossible de lire le Gist : ' + e.message + '. Token expiré ou révoqué ?</span>');
     }
