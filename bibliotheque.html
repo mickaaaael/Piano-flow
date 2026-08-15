@@ -1884,21 +1884,43 @@ document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
     }
     // 3. réécrit un Gist tout propre (écrase le contenu corrompu)
     const cleanJson = JSON.stringify({ songs: merged }, null, 2);
+    const sizeMB = (cleanJson.length / (1024*1024)).toFixed(2);
     const patch = await fetch('https://api.github.com/gists/' + gistId, {
       method:'PATCH', headers: gistHeaders(token),
       body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: cleanJson } } })
     });
-    if(!patch.ok) throw new Error('GitHub a refusé l\'écriture (' + patch.status + ')');
+    if(!patch.ok){
+      let detail = patch.status;
+      try { const j = await patch.json(); if(j.message) detail += ' — ' + j.message; } catch(e){}
+      throw new Error('GitHub a refusé l\'écriture (' + detail + '). Taille : ' + sizeMB + ' Mo.');
+    }
+    // 3b. VÉRIFICATION : relit le Gist pour confirmer que tout est arrivé
+    let verifyCount = -1, verifyOk = true;
+    try {
+      const check = await fetchGistSongs();
+      verifyCount = Object.keys(check).length;
+      for(const key of Object.keys(local)){ if(!check[key]){ verifyOk = false; break; } }
+    } catch(e){ verifyOk = false; }
     // 4. remet le local à jour avec la version fusionnée
     setLocalSongsStorage(merged);
     refreshCustomSongs();
     const total = Object.keys(merged).length;
     const savedFromGist = Object.keys(salvaged).length;
-    content.innerHTML =
-      '<span style="color:#34d399">✅ Gist réparé et réécrit proprement !</span><br><br>' +
-      '• <b>' + total + '</b> morceaux au total dans le Gist sain<br>' +
-      '• dont <b>' + savedFromGist + '</b> récupérés de l\'ancien Gist corrompu<br><br>' +
-      '<small style="color:var(--muted)">Ouvre maintenant le diagnostic sur ton autre PC et clique « Forcer la récupération » pour qu\'il reçoive cette version saine.</small>';
+    if(verifyOk && verifyCount === total){
+      content.innerHTML =
+        '<span style="color:#34d399">✅ Gist réparé et vérifié !</span><br><br>' +
+        '• <b>' + total + '</b> morceaux dans le Gist (taille ' + sizeMB + ' Mo)<br>' +
+        '• Vérification OK : les ' + verifyCount + ' morceaux sont bien présents.<br><br>' +
+        '<small style="color:var(--muted)">Sur ton autre PC : « Forcer la récupération » pour recevoir cette version.</small>';
+    } else {
+      content.innerHTML =
+        '<span style="color:#fb6f8a">⚠ Écriture faite mais un ou plusieurs morceaux manquent à la relecture.</span><br><br>' +
+        '• Envoyé : <b>' + total + '</b> morceaux (' + sizeMB + ' Mo)<br>' +
+        '• Relu dans le Gist : <b>' + (verifyCount<0?'?':verifyCount) + '</b><br><br>' +
+        (parseFloat(sizeMB) > 8
+          ? '<small style="color:#fb6f8a">⚠ Le Gist est gros (' + sizeMB + ' Mo). Le titre qui coince a probablement une <b>grosse image</b> qui fait dépasser la limite. Ouvre « ✏️ Modifier » sur ce titre, retire ou re-choisis son image (elle sera recompressée), puis réessaie.</small>'
+          : '<small style="color:var(--muted)">Réessaie une fois. Si ça persiste, le titre qui coince a peut-être un contenu inhabituel — dis-le-moi.</small>');
+    }
   }catch(e){
     content.innerHTML = '<span style="color:#fb6f8a">❌ Échec de la réparation : ' + e.message + '</span>';
   }
