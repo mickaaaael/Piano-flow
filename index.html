@@ -550,6 +550,25 @@
     box-shadow:0 0 16px rgba(52,211,153,.3);
   }
 
+  /* ---- décompte avant lecture ---- */
+  .countdown-overlay{
+    position:absolute; inset:0; z-index:20;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(6,5,14,.45); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px);
+    pointer-events:none;
+  }
+  .countdown-num{
+    font-family:'Space Grotesk',sans-serif; font-weight:700;
+    font-size:150px; line-height:1; color:#fff;
+    text-shadow:0 0 40px rgba(95,227,242,.7), 0 4px 20px rgba(0,0,0,.6);
+    animation:cdPulse .9s ease-out;
+  }
+  @keyframes cdPulse{
+    0%{ transform:scale(1.6); opacity:0; }
+    30%{ transform:scale(1); opacity:1; }
+    100%{ transform:scale(.85); opacity:.85; }
+  }
+
   /* ---- bandeau paroles ---- */
   .lyrics-band{
     position:absolute; top:48px; left:50%; transform:translateX(-50%);
@@ -1106,6 +1125,9 @@
     <button id="lyricsBtn" class="file" title="Ajouter ou modifier les paroles synchronisées">
       <span>🎤</span> Paroles
     </button>
+    <button id="countdownToggle" class="file" title="Décompte de 3 secondes avant que la lecture démarre">
+      <span>⏱</span> <span id="countdownToggleLbl">Décompte : activé</span>
+    </button>
     <label class="file" tabindex="0" title="Charger un fichier .mid" style="display:none">
       <span>📁</span> Fichier MIDI
       <input type="file" id="midiFile" accept=".mid,.midi,audio/midi" />
@@ -1159,6 +1181,11 @@
     <div class="lyrics-band hidden" id="lyricsBand">
       <div class="lyrics-now" id="lyricsNow"></div>
       <div class="lyrics-next" id="lyricsNext"></div>
+    </div>
+
+    <!-- décompte avant lecture -->
+    <div class="countdown-overlay hidden" id="countdownOverlay">
+      <div class="countdown-num" id="countdownNum">3</div>
     </div>
 
     <!-- indicateurs gestes tactiles -->
@@ -2029,7 +2056,50 @@ function playFn(){ if(playing)return; Audio.resume(); playing=true; lastTs=null;
 function pauseFn(){ playing=false;
   document.getElementById('playIc').textContent='▶';
   document.getElementById('playLbl').textContent='Lecture'; }
-function togglePlay(){ playing?pauseFn():playFn(); }
+
+// Décompte de 3 s avant de démarrer la lecture, pour avoir le temps de se placer.
+let countdownActive = false;
+let countdownTimers = [];
+function cancelCountdown(){
+  countdownActive = false;
+  countdownTimers.forEach(clearTimeout); countdownTimers = [];
+  document.getElementById('countdownOverlay').classList.add('hidden');
+}
+function playWithCountdown(){
+  if(playing || countdownActive) return;
+  const useCountdown = localStorage.getItem('pianoflow_countdown') !== '0'; // activé par défaut
+  if(!useCountdown){ playFn(); return; }
+  countdownActive = true;
+  const overlay = document.getElementById('countdownOverlay');
+  const num = document.getElementById('countdownNum');
+  overlay.classList.remove('hidden');
+  Audio.resume();
+  let n = 3;
+  const showNum = (val)=>{
+    num.textContent = val;
+    // relance l'animation
+    num.style.animation = 'none'; void num.offsetWidth; num.style.animation = '';
+    // petit bip si le son est prêt
+    try { if(val > 0) Audio.play(72, Audio.now(), 0.12, 0.35); } catch(e){}
+  };
+  showNum(n);
+  for(let i=1;i<=3;i++){
+    countdownTimers.push(setTimeout(()=>{
+      n--;
+      if(n > 0){ showNum(n); }
+      else {
+        overlay.classList.add('hidden');
+        countdownActive = false; countdownTimers = [];
+        playFn();
+      }
+    }, i*1000));
+  }
+}
+function togglePlay(){
+  if(countdownActive){ cancelCountdown(); return; } // re-clic pendant le décompte = annuler
+  if(playing) pauseFn();
+  else playWithCountdown();
+}
 
 /* ============================================================
    ÉDITEUR DE PAROLES — texte + capture du rythme en écoutant
@@ -2214,6 +2284,19 @@ document.getElementById('lyricsBtn').addEventListener('click', ()=>{
   document.getElementById('sideMenuBg').classList.remove('open');
   LyricsEd.open();
 });
+
+// Réglage du décompte avant lecture
+function updateCountdownLbl(){
+  const on = localStorage.getItem('pianoflow_countdown') !== '0';
+  const lbl = document.getElementById('countdownToggleLbl');
+  if(lbl) lbl.textContent = on ? 'Décompte : activé' : 'Décompte : désactivé';
+}
+document.getElementById('countdownToggle').addEventListener('click', ()=>{
+  const on = localStorage.getItem('pianoflow_countdown') !== '0';
+  localStorage.setItem('pianoflow_countdown', on ? '0' : '1'); // bascule
+  updateCountdownLbl();
+});
+updateCountdownLbl();
 
 /* Navigation : saute à une fraction du morceau */
 function seekTo(frac){
