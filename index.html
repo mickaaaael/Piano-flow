@@ -1322,6 +1322,7 @@
         <button class="btn-zoom" id="edZoomFit" title="Vue complète" style="font-size:13px;width:auto;padding:0 8px">⟷</button>
       </div>
       <button class="btn-ed-action btn-ed-undo" id="edUndo">↩ Annuler</button>
+      <button class="btn-ed-action" id="edTrimStartBtn" title="Supprime les notes avant le vrai début du morceau">🧹 Nettoyer le début</button>
       <button class="btn-ed-action btn-ed-insert" id="edInsertBtn">📎 Insérer un extrait</button>
       <button class="btn-ed-action btn-ed-save" id="edSave">💾 Enregistrer</button>
       <button class="btn-ed-action btn-ed-export" id="edExport">⬇ Exporter MIDI</button>
@@ -3721,7 +3722,11 @@ Règles :
   function openEditor(){
     if(!notes.length){ alert('Charge un morceau dabord !'); return; }
     pauseFn();
-    edScroll = 0; edZoom = 1; edSelA = null; edSelB = null; edSeeked = false;
+    // Si des notes ont un temps de départ négatif (avant 0), on décale la vue
+    // pour qu'elles soient visibles au lieu d'être hors champ, invisibles.
+    const minStart = notes.reduce((a,n)=>Math.min(a, n.start), 0);
+    edScroll = Math.min(0, minStart) - 0.2; // un peu de marge sous la 1re note
+    edZoom = 1; edSelA = null; edSelB = null; edSeeked = false;
     panel.classList.remove('hidden');
     document.body.classList.add('editing');
     initEdCanvas();
@@ -4264,6 +4269,47 @@ Règles :
   });
 
   // ---- Décaler la suite : crée un espace vide à la ligne de lecture ----
+  // Nettoyer le début : supprime les notes qui commencent avant le temps 0
+  // (notes "fantômes" invisibles), puis recale le morceau pour qu'il démarre à 0.
+  document.getElementById('edTrimStartBtn').addEventListener('click', ()=>{
+    const before = notes.length;
+    // combien de notes commencent avant 0 ?
+    const negatives = notes.filter(n => n.start < -0.001).length;
+    edHistory.push(notes.map(n=>({...n})));
+
+    if(negatives > 0){
+      // on retire les notes à temps négatif
+      notes = notes.filter(n => n.start >= -0.001);
+    } else {
+      // aucune note négative : on propose de retirer le tout premier groupe de notes
+      // (les "notes de départ" que l'utilisateur ne veut pas)
+      notes.sort((a,b)=>a.start-b.start);
+      if(notes.length){
+        const firstStart = notes[0].start;
+        // supprime toutes les notes du premier accord (même instant, à 45 ms près)
+        notes = notes.filter(n => n.start > firstStart + 0.045);
+      }
+    }
+
+    // recale : la première note restante démarre à 0
+    if(notes.length){
+      notes.sort((a,b)=>a.start-b.start);
+      const shift = notes[0].start;
+      if(shift > 0.001 || shift < -0.001){
+        for(const n of notes) n.start -= shift;
+      }
+    }
+    songEnd = notes.reduce((a,n)=>Math.max(a,n.start+n.dur),0);
+    edScroll = -0.2; edPlayT = 0;
+    fitRange(notes); buildEdKeyboard();
+    const removed = before - notes.length;
+    const info = document.getElementById('edAddInfo');
+    if(info) info.textContent = removed + ' note(s) de début supprimée(s).';
+    alert(removed > 0
+      ? removed + ' note(s) de début supprimée(s). Le morceau démarre maintenant proprement.'
+      : 'Aucune note de début à retirer n\'a été trouvée.');
+  });
+
   document.getElementById('edPushBtn').addEventListener('click', ()=>{
     const at = edPlayT;                 // position de la ligne jaune
     const gap = edAddDur;               // taille du trou = durée sélectionnée
