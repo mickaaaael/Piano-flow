@@ -4867,18 +4867,27 @@ const GistSync = (()=>{
     try {
       const id = await getOrCreateGist();
       const gist = await apiCall('GET', '/gists/' + id);
-      const raw = gist.files[FILENAME]?.content || '{"songs":{}}';
-      let songs;
-      try {
-        songs = JSON.parse(raw).songs || {};
-      } catch(parseErr){
-        // Gist corrompu (JSON tronqué par un ancien dépassement de stockage) :
-        // on récupère les morceaux encore valides au lieu de tout perdre.
-        songs = salvageSongsFromBrokenJson(raw);
-        console.warn('Gist corrompu — ' + Object.keys(songs).length + ' morceaux récupérés.');
+      // Les morceaux sont répartis sur plusieurs fichiers (pianoflow_songs*.json)
+      // pour rester sous la limite de 1 Mo/fichier de GitHub. On fusionne tout.
+      const merged = {};
+      const targets = Object.values(gist.files || {})
+        .filter(f => f && /^pianoflow_songs.*\.json$/i.test(f.filename || ''));
+      const list = targets.length ? targets : Object.values(gist.files||{}).filter(f=>f&&f.content);
+      for(const f of list){
+        let raw = f.content || '';
+        if(f.truncated && f.raw_url){
+          try { raw = await (await fetch(f.raw_url)).text(); } catch(e){}
+        }
+        let part = {};
+        try { part = JSON.parse(raw).songs || {}; }
+        catch(parseErr){ part = salvageSongsFromBrokenJson(raw); }
+        for(const [k,v] of Object.entries(part)){
+          const ex = merged[k];
+          if(!ex || (v.savedAt||0) >= (ex.savedAt||0)) merged[k] = v;
+        }
       }
       setSyncStatus('synced', '☁ Sync actif');
-      return songs;
+      return merged;
     } catch(e){
       setSyncStatus('', '☁ Erreur sync');
       console.warn('Erreur chargement gist:', e.message);
@@ -4886,15 +4895,34 @@ const GistSync = (()=>{
     }
   }
 
-  // Sauvegarde tous les morceaux dans le gist
+  // Sauvegarde tous les morceaux dans le gist, répartis sur plusieurs fichiers.
   async function saveToGist(songs){
     if(!token) return;
     setSyncStatus('syncing', '☁ Sauvegarde…');
     try {
       const id = await getOrCreateGist();
-      await apiCall('PATCH', '/gists/' + id, {
-        files:{ [FILENAME]: { content: JSON.stringify({songs}, null, 2) } }
+      const MAX = 850 * 1024;
+      const buckets = [{}]; let curSize = 2;
+      for(const [key, song] of Object.entries(songs)){
+        const entrySize = key.length + JSON.stringify(song).length + 8;
+        if(entrySize > MAX){ buckets.push({ [key]: song }); buckets.push({}); curSize = 2; continue; }
+        if(curSize + entrySize > MAX){ buckets.push({}); curSize = 2; }
+        buckets[buckets.length-1][key] = song; curSize += entrySize;
+      }
+      const files = {};
+      buckets.forEach((b, i)=>{
+        if(!Object.keys(b).length && buckets.length>1) return;
+        const name = i === 0 ? FILENAME : ('pianoflow_songs_' + (i+1) + '.json');
+        files[name] = { content: JSON.stringify({ songs: b }, null, 2) };
       });
+      // supprime les anciens fichiers devenus inutiles
+      try {
+        const cur = await apiCall('GET', '/gists/' + id);
+        for(const fname of Object.keys(cur.files||{})){
+          if(/^pianoflow_songs.*\.json$/i.test(fname) && !files[fname]) files[fname] = null;
+        }
+      } catch(e){}
+      await apiCall('PATCH', '/gists/' + id, { files });
       setSyncStatus('synced', '☁ Sync actif');
     } catch(e){
       setSyncStatus('', '☁ Erreur sync');

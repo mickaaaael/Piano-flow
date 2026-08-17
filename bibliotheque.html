@@ -757,11 +757,7 @@ async function deleteFromGist(key){
   const songs = await fetchGistSongs();
   if(!(key in songs)) return;   // déjà absent
   delete songs[key];
-  const patch = await fetch('https://api.github.com/gists/' + gistId, {
-    method:'PATCH', headers: gistHeaders(token),
-    body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: JSON.stringify({songs}, null, 2) } } })
-  });
-  if(!patch.ok) throw new Error('Échec suppression gist');
+  await writeGistSongs(songs);
 }
 
 /* ============================================================
@@ -1206,23 +1202,75 @@ async function fetchGistSongs(){
   const res = await fetch('https://api.github.com/gists/' + gistId, { headers: gistHeaders(token) });
   if(!res.ok) throw new Error('Gist inaccessible');
   const gist = await res.json();
-  // Le Gist peut être scindé en plusieurs fichiers si trop gros ; on les concatène.
-  let raw = '';
-  if(gist.files[GIST_FILENAME]) raw = gist.files[GIST_FILENAME].content || '';
-  else {
-    // pas de fichier au nom attendu : prend le premier fichier json trouvé
-    const f = Object.values(gist.files || {}).find(x=>x && x.content);
-    raw = f ? f.content : '{"songs":{}}';
+  // Les morceaux peuvent être répartis sur plusieurs fichiers (pianoflow_songs.json,
+  // pianoflow_songs_2.json, …) pour rester sous la limite de 1 Mo/fichier de GitHub.
+  // Note : l'API peut tronquer un fichier > 1 Mo (flag "truncated") ; dans ce cas
+  // on récupère le contenu complet via son raw_url.
+  const merged = {};
+  const files = Object.values(gist.files || {})
+    .filter(f => f && /^pianoflow_songs.*\.json$/i.test(f.filename || ''));
+  const targets = files.length ? files : Object.values(gist.files || {}).filter(f=>f&&f.content);
+  for(const f of targets){
+    let raw = f.content || '';
+    // fichier tronqué par l'API : on va chercher le contenu complet
+    if(f.truncated && f.raw_url){
+      try { raw = await (await fetch(f.raw_url)).text(); } catch(e){}
+    }
+    let part = {};
+    try { part = JSON.parse(raw).songs || {}; }
+    catch(e){ part = salvageSongsFromBrokenJson(raw); }
+    for(const [k,v] of Object.entries(part)){
+      const ex = merged[k];
+      if(!ex || (v.savedAt||0) >= (ex.savedAt||0)) merged[k] = v;
+    }
   }
-  try {
-    return JSON.parse(raw).songs || {};
-  } catch(e){
-    // JSON corrompu (souvent tronqué par un dépassement de stockage) :
-    // on récupère un maximum de morceaux valides plutôt que de tout perdre.
-    const salvaged = salvageSongsFromBrokenJson(raw);
-    console.warn('Gist corrompu — ' + Object.keys(salvaged).length + ' morceaux récupérés sur les fragments valides.');
-    return salvaged;
+  return merged;
+}
+
+// Écrit tous les morceaux dans le Gist, répartis sur plusieurs fichiers pour
+// que chacun reste sous la limite de 1 Mo imposée par l'API GitHub.
+async function writeGistSongs(allSongs){
+  const { token, gistId } = gistCreds();
+  if(!token || !gistId) throw new Error('Token ou Gist absent');
+  const MAX = 850 * 1024; // marge sous la limite de 1 Mo
+  const buckets = [{}]; let curSize = 2;
+  for(const [key, song] of Object.entries(allSongs)){
+    const entry = JSON.stringify(song);
+    const entrySize = key.length + entry.length + 8;
+    if(entrySize > MAX){
+      buckets.push({ [key]: song });
+      buckets.push({}); curSize = 2;
+      continue;
+    }
+    if(curSize + entrySize > MAX){ buckets.push({}); curSize = 2; }
+    buckets[buckets.length-1][key] = song;
+    curSize += entrySize;
   }
+  const files = {};
+  buckets.forEach((b, i)=>{
+    if(!Object.keys(b).length && buckets.length>1) return;
+    const name = i === 0 ? GIST_FILENAME : ('pianoflow_songs_' + (i+1) + '.json');
+    files[name] = { content: JSON.stringify({ songs: b }, null, 2) };
+  });
+  // supprime les anciens fichiers devenus inutiles
+  try{
+    const cur = await (await fetch('https://api.github.com/gists/' + gistId, { headers: gistHeaders(token) })).json();
+    for(const fname of Object.keys(cur.files||{})){
+      if(/^pianoflow_songs.*\.json$/i.test(fname) && !files[fname]){
+        files[fname] = null;
+      }
+    }
+  }catch(e){}
+  const patch = await fetch('https://api.github.com/gists/' + gistId, {
+    method:'PATCH', headers: gistHeaders(token),
+    body: JSON.stringify({ files })
+  });
+  if(!patch.ok){
+    let detail = patch.status;
+    try { const j = await patch.json(); if(j.message) detail += ' — ' + j.message; } catch(e){}
+    throw new Error('GitHub a refusé (' + detail + ')');
+  }
+  return Object.keys(files).filter(f=>files[f]).length;
 }
 
 // Mesure la taille réelle du Gist (octets) via l'API GitHub.
@@ -1294,11 +1342,7 @@ async function pushSongToGist(key, song){
   // copie locale n'a pas (ex. paroles ajoutées depuis le piano), on les garde.
   const remote = songs[key] || {};
   songs[key] = { ...remote, ...song };
-  const patch = await fetch('https://api.github.com/gists/' + gistId, {
-    method:'PATCH', headers: gistHeaders(token),
-    body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: JSON.stringify({songs}, null, 2) } } })
-  });
-  if(!patch.ok) throw new Error('Échec envoi gist');
+  await writeGistSongs(songs);
 }
 
 // Fusionne les morceaux du Gist dans le stockage local (au démarrage).
@@ -1925,17 +1969,14 @@ document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
       const ex = merged[key];
       if(!ex || (s.savedAt||0) >= (ex.savedAt||0)) merged[key] = s;
     }
-    // 3. réécrit un Gist tout propre (écrase le contenu corrompu)
-    const cleanJson = JSON.stringify({ songs: merged }, null, 2);
+    // 3. réécrit le Gist en répartissant sur plusieurs fichiers (sous 1 Mo chacun)
+    const cleanJson = JSON.stringify({ songs: merged });
     const sizeMB = (cleanJson.length / (1024*1024)).toFixed(2);
-    const patch = await fetch('https://api.github.com/gists/' + gistId, {
-      method:'PATCH', headers: gistHeaders(token),
-      body: JSON.stringify({ files:{ [GIST_FILENAME]: { content: cleanJson } } })
-    });
-    if(!patch.ok){
-      let detail = patch.status;
-      try { const j = await patch.json(); if(j.message) detail += ' — ' + j.message; } catch(e){}
-      throw new Error('GitHub a refusé l\'écriture (' + detail + '). Taille : ' + sizeMB + ' Mo.');
+    let nbFiles = 0;
+    try {
+      nbFiles = await writeGistSongs(merged);
+    } catch(err){
+      throw new Error(err.message + ' (taille totale : ' + sizeMB + ' Mo)');
     }
     // 3b. VÉRIFICATION : relit le Gist pour confirmer que tout est arrivé
     let verifyCount = -1, verifyOk = true, missingKeys = [];
@@ -1953,6 +1994,7 @@ document.getElementById('syncDiagRepair').addEventListener('click', async ()=>{
       content.innerHTML =
         '<span style="color:#34d399">✅ Gist réparé et vérifié !</span><br><br>' +
         '• <b>' + total + '</b> morceaux dans le Gist (taille ' + sizeMB + ' Mo)<br>' +
+        '• Répartis sur <b>' + nbFiles + '</b> fichier(s) pour respecter la limite GitHub.<br>' +
         '• Vérification OK : les ' + verifyCount + ' morceaux sont bien présents.<br><br>' +
         '<small style="color:var(--muted)">Sur ton autre PC : « Forcer la récupération » pour recevoir cette version.</small>';
     } else {
